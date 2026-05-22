@@ -1,0 +1,152 @@
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  height: 54px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--g700);
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--g400);
+}
+.roleBadge {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.roleCerealista { background: var(--g100); color: var(--g700); }
+.roleTransp     { background: var(--b100); color: var(--b600); }
+
+.nav {
+  display: flex;
+  gap: 2px;
+  margin-left: 16px;
+  flex-wrap: wrap;
+}
+.navItem {
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+.navItem:hover { background: var(--surf3); color: var(--text); }
+.navItem.active { background: var(--g100); color: var(--g700); }
+
+.right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.userLabel { font-size: 12px; color: var(--muted); }
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--g600);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+.logout {
+  padding: 6px 12px;
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.logout:hover { background: var(--surf3); }
+
+.content {
+  flex: 1;
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Tablet — diminui padding do conteúdo e da topbar */
+@media (max-width: 900px) {
+  .topbar {
+    padding: 0 12px;
+    gap: 10px;
+    height: auto;
+    min-height: 54px;
+    flex-wrap: wrap;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .nav {
+    order: 4;
+    width: 100%;
+    margin-left: 0;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+  }
+  .navItem {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .content {
+    padding: 16px 12px;
+  }
+}
+
+/* Mobile — esconde label do usuário, mantém só avatar e logout */
+@media (max-width: 600px) {
+  .roleBadge {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+  .userLabel {
+    display: none;
+  }
+  .right [class*="userLabel"] + span {
+    display: none;
+  }
+  .content {
+    padding: 12px 8px;
+  }
+  .logout {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+}

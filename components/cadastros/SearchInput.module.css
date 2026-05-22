@@ -1,0 +1,26 @@
+.wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.icon {
+  position: absolute;
+  left: 10px;
+  font-size: 12px;
+  color: var(--hint);
+  pointer-events: none;
+}
+.input {
+  padding: 8px 12px 8px 30px;
+  border: 1.5px solid var(--border2);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: inherit;
+  width: 240px;
+  background: var(--surface);
+  color: var(--text);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--g400);
+}

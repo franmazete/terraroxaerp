@@ -1,0 +1,116 @@
+.card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--g400);
+}
+.card.cheia::before { background: var(--r400); }
+.card.parcial::before { background: var(--a400); }
+.card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.produto {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--g700);
+  margin-bottom: 2px;
+}
+.cargaId {
+  font-size: 10px;
+  color: var(--hint);
+  font-family: "DM Mono", monospace;
+  margin-bottom: 14px;
+}
+
+.rota {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--surf2);
+  border-radius: var(--radius);
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.rota .origem,
+.rota .destino { font-weight: 600; }
+.rota .seta { color: var(--g400); font-size: 16px; }
+
+.info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.infoItem .lbl {
+  font-size: 10px;
+  color: var(--hint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
+}
+.infoItem .val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.saldo {
+  margin-bottom: 14px;
+}
+.saldoHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+.saldoTotal { font-size: 11px; color: var(--muted); }
+.saldoDisp { font-size: 16px; font-weight: 700; color: var(--g600); }
+.saldoDisp span { font-size: 11px; font-weight: 400; color: var(--muted); }
+
+.reservasList { margin-top: 10px; }
+.reservaRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 11px;
+}
+.reservaRow:last-child { border-bottom: none; }
+.reservaNome { color: var(--muted); }
+.reservaQtd { font-weight: 600; color: var(--b600); }
+
+.obs {
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--surf2);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.jaReservou {
+  background: var(--g100);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--g700);
+  font-weight: 600;
+}

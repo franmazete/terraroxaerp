@@ -1,0 +1,41 @@
+.timeline {
+  position: relative;
+  padding-left: 22px;
+}
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 4px;
+  bottom: 0;
+  width: 2px;
+  background: var(--surf3);
+}
+.item {
+  position: relative;
+  margin-bottom: 14px;
+}
+.dot {
+  position: absolute;
+  left: -19px;
+  top: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--g400);
+  border: 2px solid var(--surface);
+}
+.dot.a { background: var(--a400); }
+.dot.r { background: var(--r400); }
+.dot.b { background: var(--b400); }
+.dot.t { background: var(--t400); }
+.when {
+  font-size: 10px;
+  color: var(--hint);
+  margin-bottom: 2px;
+  font-family: "DM Mono", monospace;
+}
+.what {
+  font-size: 12px;
+  line-height: 1.4;
+}

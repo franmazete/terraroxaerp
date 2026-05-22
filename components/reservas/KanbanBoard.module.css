@@ -1,0 +1,64 @@
+.scroll {
+  overflow-x: auto;
+  padding-bottom: 12px;
+}
+.board {
+  display: flex;
+  gap: 14px;
+  min-width: max-content;
+}
+.col {
+  width: 240px;
+  background: var(--surf2);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  flex-shrink: 0;
+  min-height: 80px;
+}
+.colOver {
+  background: var(--g100);
+  outline: 2px dashed var(--g400);
+}
+.colHd {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.count {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 10px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 8px;
+  cursor: grab;
+  transition: all 0.15s;
+  position: relative;
+}
+.card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-1px);
+}
+.card.dragging { opacity: 0.4; cursor: grabbing; }
+
+.num {
+  font-size: 9px;
+  color: var(--hint);
+  font-family: "DM Mono", monospace;
+  margin-bottom: 3px;
+}
+.title { font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+.meta { font-size: 11px; color: var(--muted); line-height: 1.6; }

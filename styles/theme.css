@@ -1,0 +1,60 @@
+/* Paleta extraída do HTML original — mantém o visual que você curtiu. */
+:root {
+  /* Verde (cor primária, agro) */
+  --g900: #0f2004;
+  --g800: #1a3a07;
+  --g700: #26560d;
+  --g600: #357512;
+  --g500: #479919;
+  --g400: #63ba28;
+  --g300: #8dd457;
+  --g200: #bce896;
+  --g100: #e3f5cc;
+  --g50:  #f4fce8;
+
+  /* Âmbar (warnings, pendências) */
+  --a600: #8a5200;
+  --a400: #c97c00;
+  --a200: #ffd166;
+  --a100: #fff3cd;
+
+  /* Azul (info, reservas) */
+  --b600: #0d3d7a;
+  --b400: #1a6fd4;
+  --b200: #7fb8f7;
+  --b100: #dceeff;
+
+  /* Vermelho (erro, reprovação) */
+  --r600: #7a1515;
+  --r400: #d63030;
+  --r200: #f5a0a0;
+  --r100: #fde8e8;
+
+  /* Teal (sucesso, fechadas) */
+  --t600: #0a4d3a;
+  --t400: #0e7a5c;
+  --t200: #6dcfb5;
+  --t100: #d4f5ec;
+
+  /* Superfícies */
+  --slate: #f0f2f0;
+  --surface: #ffffff;
+  --surf2: #f7f9f6;
+  --surf3: #eff2ee;
+
+  /* Bordas */
+  --border:  rgba(0, 0, 0, 0.08);
+  --border2: rgba(0, 0, 0, 0.15);
+
+  /* Texto */
+  --text: #1a2015;
+  --muted: #5a6650;
+  --hint: #8fa080;
+
+  /* Raios e sombras */
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.1), 0 16px 40px rgba(0, 0, 0, 0.06);
+}

@@ -1,0 +1,73 @@
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.row.single  { grid-template-columns: 1fr; }
+.row.triple  { grid-template-columns: 1fr 1fr 1fr; }
+@media (max-width: 700px) {
+  .row, .row.triple { grid-template-columns: 1fr; }
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.group label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.group input,
+.group select,
+.group textarea {
+  padding: 9px 11px;
+  border: 1.5px solid var(--border2);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface);
+  transition: border-color 0.2s;
+}
+.group input:focus,
+.group select:focus,
+.group textarea:focus {
+  outline: none;
+  border-color: var(--g400);
+}
+.group textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+.hint { font-size: 10px; color: var(--muted); }
+
+.upload {
+  border: 2px dashed var(--border2);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--surf2);
+}
+.upload:hover {
+  border-color: var(--g400);
+  background: var(--g50);
+}
+.upload .upIcon { font-size: 24px; margin-bottom: 4px; }
+.upload p { font-size: 11px; color: var(--muted); }
+.upload .req { font-size: 10px; color: var(--r600); font-weight: 600; margin-top: 2px; }
+
+.sectionLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 16px 0 10px;
+}

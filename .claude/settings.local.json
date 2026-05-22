@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/login)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/cadastros/transportadoras)",
+      "Bash(kill %1)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/disponiveis)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/contratos)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/ordens)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(npx supabase *)",
+      "Bash(grep -E \"Modal\\\\.tsx$|Section\\\\.tsx$\")",
+      "Bash(set +x)",
+      "Bash(sed -i 's|auth\\\\.is_cerealista\\(\\)|public.is_cerealista\\(\\)|g' supabase/migrations/20260520140000_storage_buckets.sql)",
+      "Bash(sed -i 's|auth\\\\.is_transp\\(\\)|public.is_transp\\(\\)|g' supabase/migrations/20260520140000_storage_buckets.sql)",
+      "Bash(sed -i 's|auth\\\\.transp_id_atual\\(\\)|public.transp_id_atual\\(\\)|g' supabase/migrations/20260520140000_storage_buckets.sql)",
+      "Bash(sed -i 's|auth\\\\.is_admin\\(\\)|public.is_admin\\(\\)|g' supabase/migrations/20260520140000_storage_buckets.sql)",
+      "Bash(sed -i 's|auth\\\\.perfil_atual\\(\\)|public.perfil_atual\\(\\)|g' supabase/migrations/20260520140000_storage_buckets.sql)",
+      "Bash(git check-ignore *)",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(npx next *)"
+    ]
+  }
+}
