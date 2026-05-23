@@ -86,11 +86,39 @@ export async function getTransportadoras(): Promise<Transportadora[]> {
 }
 
 export async function getMotoristas(): Promise<Motorista[]> {
-  return selectAll<Motorista>("motoristas", "nome");
+  if (NAO_CONFIGURADO) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("motoristas")
+    .select("*, motorista_transportadoras(transp_id)")
+    .order("nome", { ascending: true });
+  if (error) {
+    console.error(`[queries.server] motoristas: ${error.message}`);
+    return [];
+  }
+  type Row = Motorista & { motorista_transportadoras?: { transp_id: string }[] | null };
+  return (data ?? []).map((m: Row) => ({
+    ...m,
+    transp_ids: (m.motorista_transportadoras ?? []).map((mt) => mt.transp_id),
+  })) as Motorista[];
 }
 
 export async function getVeiculos(): Promise<Veiculo[]> {
-  return selectAll<Veiculo>("veiculos", "placa_cavalo");
+  if (NAO_CONFIGURADO) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("veiculos")
+    .select("*, veiculo_transportadoras(transp_id)")
+    .order("placa_cavalo", { ascending: true });
+  if (error) {
+    console.error(`[queries.server] veiculos: ${error.message}`);
+    return [];
+  }
+  type Row = Veiculo & { veiculo_transportadoras?: { transp_id: string }[] | null };
+  return (data ?? []).map((v: Row) => ({
+    ...v,
+    transp_ids: (v.veiculo_transportadoras ?? []).map((vt) => vt.transp_id),
+  })) as Veiculo[];
 }
 
 export async function getProdutores(): Promise<Produtor[]> {

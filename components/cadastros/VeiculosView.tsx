@@ -72,20 +72,21 @@ export function VeiculosView({ dadosSSR = null, transportadorasSSR = null }: Pro
   const veiculosUsados = useMemo(() => {
     if (!ehTransp || !minhaTranspId) return new Set<string>();
     const ids = new Set<string>();
-    cargas.forEach((c) => c.reservas.forEach((r) => { if (r.transp_id === minhaTranspId && r.veiculo_id) ids.add(r.veiculo_id); }));
-    ordens.forEach((o) => { if (o.transp_id === minhaTranspId && o.veiculo_id) ids.add(o.veiculo_id); });
+    (cargas ?? []).forEach((c) => (c.reservas ?? []).forEach((r) => { if (r.transp_id === minhaTranspId && r.veiculo_id) ids.add(r.veiculo_id); }));
+    (ordens ?? []).forEach((o) => { if (o.transp_id === minhaTranspId && o.veiculo_id) ids.add(o.veiculo_id); });
     return ids;
   }, [cargas, ordens, ehTransp, minhaTranspId]);
 
   const lista = useMemo(() => {
     const q = search.toLowerCase();
-    return veiculos.filter((v) => {
+    return (veiculos ?? []).filter((v) => {
+      const transpIds = v.transp_ids ?? [];
       if (ehTransp) {
-        const vinculado = v.transp_ids.includes(minhaTranspId!);
+        const vinculado = transpIds.includes(minhaTranspId!);
         const jaUsei = veiculosUsados.has(v.id);
         if (!vinculado && !jaUsei) return false;
       }
-      if (filtroTransp && !v.transp_ids.includes(filtroTransp)) return false;
+      if (filtroTransp && !transpIds.includes(filtroTransp)) return false;
       return v.placa_cavalo.toLowerCase().includes(q) || (v.placa_carreta ?? "").toLowerCase().includes(q);
     });
   }, [veiculos, search, filtroTransp, ehTransp, minhaTranspId, veiculosUsados]);
@@ -101,7 +102,7 @@ export function VeiculosView({ dadosSSR = null, transportadorasSSR = null }: Pro
       placa_carreta: v.placa_carreta ?? "",
       tipo: v.tipo,
       capacidade_kg: v.capacidade_kg,
-      transp_ids: v.transp_ids,
+      transp_ids: v.transp_ids ?? [],
       ativo: v.ativo,
     });
     setEditing(v);
@@ -122,12 +123,13 @@ export function VeiculosView({ dadosSSR = null, transportadorasSSR = null }: Pro
       const placaUp = form.placa_cavalo.toUpperCase().replace(/\s+/g, "");
       const existente = veiculos.find((v) => v.placa_cavalo.toUpperCase().replace(/\s+/g, "") === placaUp);
       if (existente) {
+        const existenteIds = existente.transp_ids ?? [];
         const transpsExistentes =
-          existente.transp_ids.map((tid) => transportadoras.find((t) => t.id === tid)?.nome_fantasia).filter(Boolean).join(", ") || "nenhuma";
+          existenteIds.map((tid) => transportadoras.find((t) => t.id === tid)?.nome_fantasia).filter(Boolean).join(", ") || "nenhuma";
         const minhaTransp = form.transp_ids[0];
         const minhaNome = transportadoras.find((t) => t.id === minhaTransp)?.nome_fantasia ?? "esta transportadora";
 
-        if (existente.transp_ids.includes(minhaTransp)) {
+        if (existenteIds.includes(minhaTransp)) {
           toast.info(`Veículo "${existente.placa_cavalo}" já está vinculado a ${minhaNome}.`);
           return;
         }
@@ -260,7 +262,7 @@ export function VeiculosView({ dadosSSR = null, transportadorasSSR = null }: Pro
                   <td className={tableStyles.mono}>{v.placa_carreta || "—"}</td>
                   <td>{v.tipo}</td>
                   <td><strong>{fmtKg(v.capacidade_kg)}</strong></td>
-                  {!ehTransp && <td>{v.transp_ids.map((tid) => transportadoras.find((t) => t.id === tid)?.nome_fantasia).filter(Boolean).join(", ") || "—"}</td>}
+                  {!ehTransp && <td>{(v.transp_ids ?? []).map((tid) => transportadoras.find((t) => t.id === tid)?.nome_fantasia).filter(Boolean).join(", ") || "—"}</td>}
                   <td><Badge tone={v.ativo ? "green" : "gray"}>{v.ativo ? "Ativo" : "Inativo"}</Badge></td>
                   <td><Button size="sm" onClick={() => openEdit(v)}>Editar</Button></td>
                 </tr>

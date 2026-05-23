@@ -52,8 +52,8 @@ export function DashComercial() {
 
     // Top 5 transps por volume reservado
     const volPorTransp = new Map<string, number>();
-    cargas.forEach((c) =>
-      c.reservas.forEach((r) => {
+    (cargas ?? []).forEach((c) =>
+      (c.reservas ?? []).forEach((r) => {
         volPorTransp.set(r.transp_id, (volPorTransp.get(r.transp_id) ?? 0) + r.qtd_kg);
       }),
     );

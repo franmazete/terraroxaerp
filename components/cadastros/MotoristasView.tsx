@@ -73,20 +73,21 @@ export function MotoristasView({ dadosSSR = null, transportadorasSSR = null }: P
   const motoristasUsados = useMemo(() => {
     if (!ehTransp || !minhaTranspId) return new Set<string>();
     const ids = new Set<string>();
-    cargas.forEach((c) => c.reservas.forEach((r) => { if (r.transp_id === minhaTranspId && r.motorista_id) ids.add(r.motorista_id); }));
-    ordens.forEach((o) => { if (o.transp_id === minhaTranspId && o.motorista_id) ids.add(o.motorista_id); });
+    (cargas ?? []).forEach((c) => (c.reservas ?? []).forEach((r) => { if (r.transp_id === minhaTranspId && r.motorista_id) ids.add(r.motorista_id); }));
+    (ordens ?? []).forEach((o) => { if (o.transp_id === minhaTranspId && o.motorista_id) ids.add(o.motorista_id); });
     return ids;
   }, [cargas, ordens, ehTransp, minhaTranspId]);
 
   const lista = useMemo(() => {
     const q = search.toLowerCase();
-    return motoristas.filter((m) => {
+    return (motoristas ?? []).filter((m) => {
+      const transpIds = m.transp_ids ?? [];
       if (ehTransp) {
-        const vinculado = m.transp_ids.includes(minhaTranspId!);
+        const vinculado = transpIds.includes(minhaTranspId!);
         const jaUsei = motoristasUsados.has(m.id);
         if (!vinculado && !jaUsei) return false;
       }
-      if (filtroTransp && !m.transp_ids.includes(filtroTransp)) return false;
+      if (filtroTransp && !transpIds.includes(filtroTransp)) return false;
       return m.nome.toLowerCase().includes(q) || m.cpf.includes(q) || m.cnh.includes(q);
     });
   }, [motoristas, search, filtroTransp, ehTransp, minhaTranspId, motoristasUsados]);
@@ -104,7 +105,7 @@ export function MotoristasView({ dadosSSR = null, transportadorasSSR = null }: P
       celular: m.celular,
       email: m.email ?? "",
       foto_url: m.foto_url ?? "",
-      transp_ids: m.transp_ids,
+      transp_ids: m.transp_ids ?? [],
       ativo: m.ativo,
     });
     setEditing(m);
@@ -129,12 +130,13 @@ export function MotoristasView({ dadosSSR = null, transportadorasSSR = null }: P
       const cpfLimpo = form.cpf.replace(/\D+/g, "");
       const existente = motoristas.find((m) => m.cpf.replace(/\D+/g, "") === cpfLimpo);
       if (existente) {
+        const existenteIds = existente.transp_ids ?? [];
         const transpsExistentes =
-          existente.transp_ids.map((tid) => transportadoras.find((t) => t.id === tid)?.nome_fantasia).filter(Boolean).join(", ") || "nenhuma";
+          existenteIds.map((tid) => transportadoras.find((t) => t.id === tid)?.nome_fantasia).filter(Boolean).join(", ") || "nenhuma";
         const minhaTransp = form.transp_ids[0];
         const minhaNome = transportadoras.find((t) => t.id === minhaTransp)?.nome_fantasia ?? "esta transportadora";
 
-        if (existente.transp_ids.includes(minhaTransp)) {
+        if (existenteIds.includes(minhaTransp)) {
           toast.info(`Motorista "${existente.nome}" já está vinculado a ${minhaNome}.`);
           return;
         }
@@ -270,7 +272,7 @@ export function MotoristasView({ dadosSSR = null, transportadorasSSR = null }: P
                   {!ehTransp && (
                     <td>
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                        {m.transp_ids.map((tid) => {
+                        {(m.transp_ids ?? []).map((tid) => {
                           const t = transportadoras.find((x) => x.id === tid);
                           return t ? <Badge key={tid} tone="blue">{t.nome_fantasia}</Badge> : null;
                         })}
@@ -363,7 +365,7 @@ export function MotoristasView({ dadosSSR = null, transportadorasSSR = null }: P
         {/* Bloco I.4½: facilidade UX — mostra placas disponíveis da(s) transp(s) do motorista */}
         {form.transp_ids.length > 0 && (() => {
           const placasDaTransp = veiculos.filter(
-            (v) => v.ativo && form.transp_ids.some((tid) => v.transp_ids.includes(tid)),
+            (v) => v.ativo && form.transp_ids.some((tid) => (v.transp_ids ?? []).includes(tid)),
           );
           return (
             <div style={{ marginTop: 12, padding: 12, background: "var(--surf2)", borderRadius: "var(--radius)" }}>
