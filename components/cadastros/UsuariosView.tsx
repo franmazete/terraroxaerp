@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -10,8 +11,13 @@ import { Table, tableStyles } from "@/components/ui/Table";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useDataStore } from "@/lib/data-store";
 import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { fmtDate } from "@/lib/domain/format";
+import {
+  atualizarUsuarioAction,
+  enviarRedefinicaoSenhaAction,
+} from "@/lib/api/usuarios-actions";
 import { ConvidarUsuarioModal } from "./ConvidarUsuarioModal";
 import { CadastroHeader } from "./CadastroHeader";
 import { SearchInput } from "./SearchInput";
@@ -49,7 +55,11 @@ export function UsuariosView({ usuariosSSR = null, transportadorasSSR = null }: 
   const transportadoras = transportadorasSSR ?? store.transportadoras;
   const { addUsuario, updateUsuario } = store;
   const toast = useToast();
-  const { user: authUser } = useAuth();
+  const confirmar = useConfirm();
+  const router = useRouter();
+  const { user: authUser, supabaseConfigured } = useAuth();
+  const [salvando, setSalvando] = useState(false);
+  const [redefinindo, setRedefinindo] = useState(false);
   const [search, setSearch] = useState("");
   const [filtroPerfil, setFiltroPerfil] = useState<string>("");
   const [editing, setEditing] = useState<Usuario | null>(null);
@@ -82,28 +92,97 @@ export function UsuariosView({ usuariosSSR = null, transportadorasSSR = null }: 
     setEditing(u);
   }
 
-  function salvar() {
+  async function salvar() {
     if (!form.nome.trim()) {
-      toast.warn("Informe o nome.");
+      toast.warn("Informe o nome do usuário.");
       return;
     }
     if (!form.email.trim()) {
-      toast.warn("Informe o e-mail.");
+      toast.warn("Informe o e-mail do usuário.");
       return;
     }
     if (form.perfil === "transportadora" && !form.transp_id) {
-      toast.warn("Vincule uma transportadora.");
+      toast.warn("Para o perfil Transportadora, é obrigatório selecionar uma transportadora.");
       return;
     }
-    const payload = { ...form, transp_id: form.transp_id || undefined };
-    if (editing && editing.id) {
-      updateUsuario(editing.id, payload);
-      toast.success(`Usuário "${form.nome}" atualizado.`);
-    } else {
-      addUsuario(payload);
-      toast.success(`Usuário "${form.nome}" cadastrado.`);
+
+    setSalvando(true);
+    try {
+      if (supabaseConfigured && editing?.id) {
+        // ─── Modo Supabase real: persiste via Server Action ─────────────
+        const r = await atualizarUsuarioAction(editing.id, {
+          nome: form.nome,
+          email: form.email,
+          perfil: form.perfil,
+          transp_id: form.transp_id || null,
+          ativo: form.ativo,
+        });
+        if ("error" in r) {
+          toast.error(r.error);
+          return;
+        }
+        toast.success(`Usuário "${form.nome}" atualizado.`);
+        router.refresh();
+      } else if (supabaseConfigured && !editing?.id) {
+        // Pra CRIAR usuário no Supabase, o caminho correto é o modal
+        // "Convidar Usuário" (que cria no Auth + tabela). Aqui só edita.
+        toast.warn(
+          "Para criar um novo usuário com acesso ao sistema, use o botão \"Convidar usuário\" no topo. Isso cria o login no Supabase Auth.",
+          "Use Convidar Usuário",
+        );
+        return;
+      } else {
+        // ─── Modo mock (sem Supabase) ───────────────────────────────────
+        const payload = { ...form, transp_id: form.transp_id || undefined };
+        if (editing && editing.id) {
+          updateUsuario(editing.id, payload);
+          toast.success(`Usuário "${form.nome}" atualizado.`);
+        } else {
+          addUsuario(payload);
+          toast.success(`Usuário "${form.nome}" cadastrado.`);
+        }
+      }
+      setEditing(null);
+    } finally {
+      setSalvando(false);
     }
-    setEditing(null);
+  }
+
+  async function redefinirSenhaUsuario() {
+    if (!editing?.email) {
+      toast.warn("E-mail do usuário não está preenchido.");
+      return;
+    }
+    const ok = await confirmar({
+      titulo: "Enviar redefinição de senha?",
+      mensagem: (
+        <>
+          Um e-mail será enviado para <strong>{editing.email}</strong> com o link de redefinição.
+          <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>
+            O usuário precisa clicar no link em até 1 hora para definir a nova senha.
+          </div>
+        </>
+      ),
+      variante: "info",
+      confirmarLabel: "Enviar e-mail",
+    });
+    if (!ok) return;
+
+    setRedefinindo(true);
+    try {
+      const r = await enviarRedefinicaoSenhaAction(editing.email);
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      const provider = r.provider === "resend" ? "Resend" : "SMTP do Supabase";
+      toast.success(
+        `Link de redefinição enviado para ${editing.email}. (via ${provider})`,
+        "E-mail enviado",
+      );
+    } finally {
+      setRedefinindo(false);
+    }
   }
 
   return (
@@ -185,8 +264,22 @@ export function UsuariosView({ usuariosSSR = null, transportadorasSSR = null }: 
         title={editing?.id ? `Editar ${editing.nome}` : "Novo Usuário"}
         footer={
           <>
-            <Button onClick={() => setEditing(null)}>Cancelar</Button>
-            <Button variant="primary" onClick={salvar}>Salvar</Button>
+            {/* Botão de redefinir senha — só em edição + modo Supabase */}
+            {editing?.id && supabaseConfigured && (
+              <Button
+                variant="danger"
+                onClick={redefinirSenhaUsuario}
+                disabled={redefinindo || salvando}
+                title="Enviar link de redefinição de senha por e-mail"
+              >
+                {redefinindo ? "Enviando..." : "🔑 Enviar redefinição de senha"}
+              </Button>
+            )}
+            <div style={{ flex: 1 }} />
+            <Button onClick={() => setEditing(null)} disabled={salvando || redefinindo}>Cancelar</Button>
+            <Button variant="primary" onClick={salvar} disabled={salvando || redefinindo}>
+              {salvando ? "Salvando..." : "Salvar"}
+            </Button>
           </>
         }
       >

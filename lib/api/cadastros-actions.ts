@@ -14,6 +14,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { traduzirErro } from "./erros-pt";
 import type {
   Cliente,
   Local,
@@ -69,7 +70,7 @@ export async function criarProduto(input: { nome: string; descricao?: string }):
     .insert({ nome: input.nome, descricao: input.descricao })
     .select("*")
     .single();
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/produtos");
   return { ok: true, data: data as Produto };
 }
@@ -79,7 +80,7 @@ export async function atualizarProduto(id: string, patch: { nome?: string; descr
   if ("error" in auth) return { error: auth.error };
   const supabase = await createClient();
   const { error } = await supabase.from("produtos").update(patch).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/produtos");
   return { ok: true };
 }
@@ -109,7 +110,7 @@ export async function criarProdutor(input: {
     .insert({ ...input, tipo: input.tipo ?? "vendedor", ativo: true })
     .select("*")
     .single();
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/produtores");
   return { ok: true, data: data as Produtor };
 }
@@ -119,7 +120,7 @@ export async function atualizarProdutor(id: string, patch: Partial<Produtor>): P
   if ("error" in auth) return { error: auth.error };
   const supabase = await createClient();
   const { error } = await supabase.from("produtores").update(patch).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/produtores");
   return { ok: true };
 }
@@ -146,7 +147,7 @@ export async function criarCliente(input: {
     .insert({ ...input, ativo: true })
     .select("*")
     .single();
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/clientes");
   return { ok: true, data: data as Cliente };
 }
@@ -156,7 +157,7 @@ export async function atualizarCliente(id: string, patch: Partial<Cliente>): Pro
   if ("error" in auth) return { error: auth.error };
   const supabase = await createClient();
   const { error } = await supabase.from("clientes").update(patch).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/clientes");
   return { ok: true };
 }
@@ -183,7 +184,7 @@ export async function criarLocal(input: {
 
   const supabase = await createClient();
   const { data, error } = await supabase.from("locais").insert(input).select("*").single();
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/locais");
   return { ok: true, data: data as Local };
 }
@@ -193,7 +194,7 @@ export async function atualizarLocal(id: string, patch: Partial<Local>): Promise
   if ("error" in auth) return { error: auth.error };
   const supabase = await createClient();
   const { error } = await supabase.from("locais").update(patch).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/locais");
   return { ok: true };
 }
@@ -222,7 +223,7 @@ export async function criarTerminal(input: {
     .insert({ ...input, ativo: true })
     .select("*")
     .single();
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/terminais");
   return { ok: true, data: data as Terminal };
 }
@@ -232,7 +233,7 @@ export async function atualizarTerminal(id: string, patch: Partial<Terminal>): P
   if ("error" in auth) return { error: auth.error };
   const supabase = await createClient();
   const { error } = await supabase.from("terminais").update(patch).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/terminais");
   return { ok: true };
 }
@@ -275,7 +276,7 @@ export async function criarTransportadora(input: {
     .insert(payload)
     .select("*")
     .single();
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/transportadoras");
   return { ok: true, data: data as Transportadora };
 }
@@ -288,7 +289,7 @@ export async function atualizarTransportadora(id: string, patch: Partial<Transpo
   const { nome: _nome, contato: _contato, cnpj: _cnpj, criada_em: _ce, ...patchLimpo } = patch as Record<string, unknown>;
   void _nome; void _contato; void _cnpj; void _ce;
   const { error } = await supabase.from("transportadoras").update(patchLimpo).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/transportadoras");
   return { ok: true };
 }
@@ -338,7 +339,7 @@ export async function atualizarMotorista(id: string, patch: Partial<Motorista>):
   const supabase = await createClient();
   const { transp_ids, ...motoristaPatch } = patch;
   const { error } = await supabase.from("motoristas").update(motoristaPatch).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   // Atualiza vínculos N:N (delete + insert simples; idempotente)
   if (transp_ids) {
     await supabase.from("motorista_transportadoras").delete().eq("motorista_id", id);
@@ -405,7 +406,7 @@ export async function atualizarVeiculo(id: string, patch: Partial<Veiculo>): Pro
   const supabase = await createClient();
   const { transp_ids, ...veiculoPatch } = patch;
   const { error } = await supabase.from("veiculos").update(veiculoPatch).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   if (transp_ids) {
     await supabase.from("veiculo_transportadoras").delete().eq("veiculo_id", id);
     if (transp_ids.length > 0) {

@@ -18,6 +18,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { traduzirErro } from "./erros-pt";
 import type { Perfil, Pendencia } from "@/lib/types";
 
 type ActionResult<T = unknown> = { ok: true; data?: T } | { error: string };
@@ -83,7 +84,7 @@ export async function publicarContratoAction(input: {
     .select("id")
     .single();
 
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/contratos");
   return { ok: true, data };
 }
@@ -93,7 +94,7 @@ export async function disponibilizarContratoAction(id: string): Promise<ActionRe
   if (!user) return { error: "Não autenticado" };
   const supabase = await createClient();
   const { error } = await supabase.from("contratos").update({ disponivel: true }).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/contratos");
   revalidatePath(`/contratos/${id}`);
   return { ok: true };
@@ -123,7 +124,7 @@ export async function atualizarContratoAction(
   }
   const supabase = await createClient();
   const { error } = await supabase.from("contratos").update(patch).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/contratos");
   revalidatePath(`/contratos/${id}`);
   return { ok: true };
@@ -149,7 +150,7 @@ export async function excluirContratoAction(id: string): Promise<ActionResult> {
   }
 
   const { error } = await supabase.from("contratos").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/contratos");
   return { ok: true };
 }
@@ -397,7 +398,7 @@ export async function resolverPendenciaAction(id: string): Promise<ActionResult>
       resolvida_por_user_id: user.id,
     })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: traduzirErro(error) };
   revalidatePath("/pendencias");
   return { ok: true };
 }
