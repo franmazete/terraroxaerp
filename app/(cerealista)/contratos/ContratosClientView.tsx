@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -114,7 +114,7 @@ export function ContratosClientView({
   const listaPaginada = useMemo(() => lista.slice(inicio, fim), [lista, inicio, fim]);
 
   // Reset página quando filtros mudam
-  useMemo(() => { setPagina(1); }, [search, filtroStatus, filtroOperacao, filtroSafra, tamanhoPagina]);
+  useEffect(() => { setPagina(1); }, [search, filtroStatus, filtroOperacao, filtroSafra, tamanhoPagina]);
 
   const stats = useMemo(() => {
     const ativos = contratos.filter((c) => c.status === "ativo");

@@ -320,7 +320,7 @@ export async function criarMotorista(input: {
     .insert({ ...motoristaInput, ativo: true })
     .select("*")
     .single();
-  if (error || !motorista) return { error: error?.message ?? "Falha ao criar motorista" };
+  if (error || !motorista) return { error: traduzirErro(error ?? { message: "Falha ao criar motorista" }) };
 
   // Inserir vínculos N:N
   if (transp_ids.length > 0) {
@@ -360,7 +360,7 @@ export async function vincularMotoristaTransp(motoristaId: string, transpId: str
   const { error } = await supabase
     .from("motorista_transportadoras")
     .insert({ motorista_id: motoristaId, transp_id: transpId });
-  if (error && !error.message.includes("duplicate")) return { error: error.message };
+  if (error && !error.message.includes("duplicate")) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/motoristas");
   return { ok: true };
 }
@@ -389,7 +389,7 @@ export async function criarVeiculo(input: {
     .insert({ ...veiculoInput, ativo: true })
     .select("*")
     .single();
-  if (error || !veiculo) return { error: error?.message ?? "Falha ao criar veículo" };
+  if (error || !veiculo) return { error: traduzirErro(error ?? { message: "Falha ao criar veículo" }) };
 
   if (transp_ids.length > 0) {
     await supabase.from("veiculo_transportadoras").insert(
@@ -426,7 +426,7 @@ export async function vincularVeiculoTransp(veiculoId: string, transpId: string)
   const { error } = await supabase
     .from("veiculo_transportadoras")
     .insert({ veiculo_id: veiculoId, transp_id: transpId });
-  if (error && !error.message.includes("duplicate")) return { error: error.message };
+  if (error && !error.message.includes("duplicate")) return { error: traduzirErro(error) };
   revalidatePath("/cadastros/veiculos");
   return { ok: true };
 }

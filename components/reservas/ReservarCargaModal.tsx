@@ -10,6 +10,8 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { useDataStore } from "@/lib/data-store";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useRouter } from "next/navigation";
+import { criarReservaAction } from "@/lib/api/actions";
 import { disponivelKg } from "@/lib/domain/saldo";
 import { fmtKg, fmtBRLNumber } from "@/lib/domain/format";
 import { transportadorasDb } from "@/lib/mock-data";
@@ -30,9 +32,10 @@ const EMPTY_MOT: NovoMotorista = { nome: "", cpf: "", cnh: "", celular: "" };
 const EMPTY_VEI: NovoVeiculo = { placa_cavalo: "", placa_carreta: "", tipo: "Bitrem", capacidade_kg: 40000 };
 
 export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
-  const { user } = useAuth();
+  const { user, supabaseConfigured } = useAuth();
   const toast = useToast();
   const confirmar = useConfirm();
+  const router = useRouter();
   const { criarReserva, motoristas, veiculos, addMotorista, addVeiculo, vincularTranspAoMotorista, vincularTranspAoVeiculo } = useDataStore();
   const [qtd, setQtd] = useState<number | "">("");
   const [frete, setFrete] = useState<number | "">("");
@@ -182,6 +185,33 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
       if (!ok) return;
     }
 
+    if (supabaseConfigured) {
+      // ─── Modo Supabase: grava via Server Action ─────────────────
+      const r = await criarReservaAction({
+        carga_id: carga.id,
+        motorista_id: mot.id,
+        veiculo_id: vei.id,
+        motorista: mot.nome,
+        placa: vei.placa_cavalo,
+        qtd_kg: qtdN,
+        frete_ton: freteN,
+        obs,
+      });
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(
+        `Reserva criada · ${fmtKg(qtdN)} · R$ ${total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}. Aguardando aprovação da cerealista.`,
+        "Reserva enviada",
+      );
+      router.refresh();
+      onSuccess?.();
+      onClose();
+      return;
+    }
+
+    // ─── Modo mock (fallback) ────────────────────────────────────
     const reserva = criarReserva(carga.id, {
       transp_id: user.transp_id,
       transp_nome: transp.nome_fantasia,

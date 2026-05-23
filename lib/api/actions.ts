@@ -67,7 +67,7 @@ export async function publicarContratoAction(input: {
   // Número auto via RPC (Bloco B2 — sequence dedicada no banco)
   const { data: numeroData, error: errNumero } = await supabase.rpc("proximo_numero_contrato");
   if (errNumero || !numeroData) {
-    return { error: errNumero?.message ?? "Falha ao gerar número do contrato" };
+    return { error: traduzirErro(errNumero ?? { message: "Falha ao gerar número do contrato" }) };
   }
   const numero = numeroData as string;
 
@@ -92,6 +92,9 @@ export async function publicarContratoAction(input: {
 export async function disponibilizarContratoAction(id: string): Promise<ActionResult> {
   const user = await getAuthUser();
   if (!user) return { error: "Não autenticado" };
+  if (!["admin", "comercial", "logistica"].includes(user.perfil)) {
+    return { error: "Sem permissão para disponibilizar contratos" };
+  }
   const supabase = await createClient();
   const { error } = await supabase.from("contratos").update({ disponivel: true }).eq("id", id);
   if (error) return { error: traduzirErro(error) };
@@ -187,7 +190,7 @@ export async function publicarCargaAction(input: {
     .insert({ ...cargaInput, status: "disponivel" })
     .select("id")
     .single();
-  if (e1 || !carga) return { error: e1?.message ?? "Falha ao criar carga" };
+  if (e1 || !carga) return { error: traduzirErro(e1 ?? { message: "Falha ao criar carga" }) };
 
   // Desconta do saldo
   const { data: ct } = await supabase
@@ -258,7 +261,7 @@ export async function criarReservaAction(input: {
     .select("id")
     .single();
 
-  if (error || !data) return { error: error?.message ?? "Falha ao reservar" };
+  if (error || !data) return { error: traduzirErro(error ?? { message: "Falha ao reservar" }) };
 
   // Cria pendência "aprovar_reserva" pra logística
   await criarPendenciaServer({
@@ -289,13 +292,13 @@ export async function reprovarReservaAction(reservaId: string): Promise<ActionRe
     .select("id, carga_id, qtd_kg")
     .eq("id", reservaId)
     .single();
-  if (e1 || !reserva) return { error: e1?.message ?? "Reserva não encontrada" };
+  if (e1 || !reserva) return { error: traduzirErro(e1 ?? { message: "Reserva não encontrada" }) };
 
   const { error: eUp } = await supabase
     .from("reservas")
     .update({ status: "reprovada" })
     .eq("id", reservaId);
-  if (eUp) return { error: eUp.message };
+  if (eUp) return { error: traduzirErro(eUp) };
 
   // Devolve kg ao saldo da carga (reservado_kg -= qtd)
   const { data: carga } = await supabase
@@ -338,7 +341,7 @@ export async function aprovarReservaAction(reservaId: string): Promise<ActionRes
     .eq("id", reservaId)
     .select("transp_id")
     .single();
-  if (e1 || !reserva) return { error: e1?.message ?? "Reserva não encontrada" };
+  if (e1 || !reserva) return { error: traduzirErro(e1 ?? { message: "Reserva não encontrada" }) };
 
   // Resolve pendência anterior + cria nova
   await supabase
@@ -423,7 +426,7 @@ export async function cancelarOrdemAction(input: {
     .from("ordens_carregamento")
     .update({ status: "cancelada" })
     .eq("id", input.oc_id);
-  if (e1) return { error: e1.message };
+  if (e1) return { error: traduzirErro(e1) };
 
   // Cancela pendências da OC
   await supabase

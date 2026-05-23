@@ -141,7 +141,9 @@ export async function getCargas(): Promise<Carga[]> {
     console.error("[queries.server] cargas:", error.message);
     return [];
   }
-  return (data ?? []) as Carga[];
+  // Garante que cada carga tenha sempre o array `reservas` (Postgres pode omitir relação vazia)
+  const cargas = (data ?? []).map((c) => ({ ...c, reservas: c.reservas ?? [] })) as Carga[];
+  return cargas;
 }
 
 export async function getReservasDaTransp(transpId: string): Promise<Reserva[]> {
