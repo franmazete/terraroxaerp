@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { useRouter } from "next/navigation";
 import { publicarCargaAction } from "@/lib/api/actions";
 import { fmtKg, fmtBRL, fmtDate } from "@/lib/domain/format";
+import { NovoLocalInlineModal } from "./NovoLocalInlineModal";
 import type { Cliente, Contrato, Local, Produto, Transportadora } from "@/lib/types";
 
 interface Props {
@@ -39,7 +40,16 @@ export function PublicarCargaModal({
 }: Props) {
   const store = useDataStore();
   const contratos = contratosSSR ?? store.contratos;
-  const locais = locaisSSR ?? store.locais;
+  // Estado pra locais criados inline durante a sessão atual (some quando o modal fecha/recarrega).
+  const [locaisExtras, setLocaisExtras] = useState<Local[]>([]);
+  const locaisBase = locaisSSR ?? store.locais;
+  const locais = useMemo(() => {
+    if (locaisExtras.length === 0) return locaisBase;
+    const idsExistentes = new Set(locaisBase.map((l) => l.id));
+    return [...locaisExtras.filter((l) => !idsExistentes.has(l.id)), ...locaisBase];
+  }, [locaisBase, locaisExtras]);
+  const [novoLocalOrigemOpen, setNovoLocalOrigemOpen] = useState(false);
+  const [novoLocalDestinoOpen, setNovoLocalDestinoOpen] = useState(false);
   const produtos = produtosSSR ?? store.produtos;
   const clientes = clientesSSR ?? store.clientes;
   const transportadoras = transportadorasSSR ?? store.transportadoras;
@@ -254,32 +264,42 @@ export function PublicarCargaModal({
         </Field>
       </FormRow>
       <FormRow>
-        <Field label="Local de Origem *" hint={contrato ? "Pré-selecionado pelo contrato — pode trocar" : undefined}>
-          <Select value={origemLocalId} onChange={(e) => setOrigemLocalId(e.target.value)}>
-            <option value="">Selecione...</option>
-            {(() => {
-              const padrao = locais.filter((l) => l.tipo === "fazenda" || l.tipo === "armazem_origem");
-              // Garante que o local atualmente selecionado (vindo do contrato) sempre aparece
-              const atual = locais.find((l) => l.id === origemLocalId);
-              const lista = atual && !padrao.some((l) => l.id === atual.id) ? [atual, ...padrao] : padrao;
-              return lista.map((l) => (
-                <option key={l.id} value={l.id}>{l.nome} — {l.cidade}/{l.uf}</option>
-              ));
-            })()}
-          </Select>
+        <Field label="Local de Origem *" hint={contrato ? "Pré-selecionado pelo contrato — pode trocar. Clique no + pra criar novo." : "Clique no + pra criar local na hora"}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <Select value={origemLocalId} onChange={(e) => setOrigemLocalId(e.target.value)} style={{ flex: 1 }}>
+              <option value="">Selecione...</option>
+              {(() => {
+                const padrao = locais.filter((l) => l.tipo === "fazenda" || l.tipo === "armazem_origem");
+                // Garante que o local atualmente selecionado (vindo do contrato) sempre aparece
+                const atual = locais.find((l) => l.id === origemLocalId);
+                const lista = atual && !padrao.some((l) => l.id === atual.id) ? [atual, ...padrao] : padrao;
+                return lista.map((l) => (
+                  <option key={l.id} value={l.id}>{l.nome} — {l.cidade}/{l.uf}</option>
+                ));
+              })()}
+            </Select>
+            <Button size="sm" variant="success" onClick={() => setNovoLocalOrigemOpen(true)} title="Criar novo local de origem">
+              + Novo
+            </Button>
+          </div>
         </Field>
-        <Field label="Destino" hint="Opcional — se ainda não definido, deixe em branco">
-          <Select value={destinoLocalId} onChange={(e) => setDestinoLocalId(e.target.value)}>
-            <option value="">— A definir —</option>
-            {(() => {
-              const padrao = locais.filter((l) => l.tipo === "destino" || l.tipo === "porto" || l.tipo === "terminal");
-              const atual = locais.find((l) => l.id === destinoLocalId);
-              const lista = atual && !padrao.some((l) => l.id === atual.id) ? [atual, ...padrao] : padrao;
-              return lista.map((l) => (
-                <option key={l.id} value={l.id}>{l.nome} — {l.cidade}/{l.uf}</option>
-              ));
-            })()}
-          </Select>
+        <Field label="Destino" hint="Opcional — clique no + pra criar destino novo">
+          <div style={{ display: "flex", gap: 6 }}>
+            <Select value={destinoLocalId} onChange={(e) => setDestinoLocalId(e.target.value)} style={{ flex: 1 }}>
+              <option value="">— A definir —</option>
+              {(() => {
+                const padrao = locais.filter((l) => l.tipo === "destino" || l.tipo === "porto" || l.tipo === "terminal");
+                const atual = locais.find((l) => l.id === destinoLocalId);
+                const lista = atual && !padrao.some((l) => l.id === atual.id) ? [atual, ...padrao] : padrao;
+                return lista.map((l) => (
+                  <option key={l.id} value={l.id}>{l.nome} — {l.cidade}/{l.uf}</option>
+                ));
+              })()}
+            </Select>
+            <Button size="sm" variant="success" onClick={() => setNovoLocalDestinoOpen(true)} title="Criar novo destino">
+              + Novo
+            </Button>
+          </div>
         </Field>
       </FormRow>
       <FormRow variant="single">
@@ -335,6 +355,25 @@ export function PublicarCargaModal({
           ? "✓ Carga ABERTA — qualquer transportadora ativa pode reservar"
           : `🔒 Carga RESTRITA — só ${transpsPermitidas.length} transportadora(s) podem ver e reservar`}
       </div>
+
+      <NovoLocalInlineModal
+        open={novoLocalOrigemOpen}
+        onClose={() => setNovoLocalOrigemOpen(false)}
+        tipoSugerido="armazem_origem"
+        onCriado={(local) => {
+          setLocaisExtras((arr) => [local, ...arr]);
+          setOrigemLocalId(local.id);
+        }}
+      />
+      <NovoLocalInlineModal
+        open={novoLocalDestinoOpen}
+        onClose={() => setNovoLocalDestinoOpen(false)}
+        tipoSugerido="destino"
+        onCriado={(local) => {
+          setLocaisExtras((arr) => [local, ...arr]);
+          setDestinoLocalId(local.id);
+        }}
+      />
     </Modal>
   );
 }

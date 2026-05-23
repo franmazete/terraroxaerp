@@ -15,6 +15,7 @@ import { LancarContratoModal } from "@/components/contratos/LancarContratoModal"
 import { useDataStore } from "@/lib/data-store";
 import { fmtKg, fmtDate } from "@/lib/domain/format";
 import { downloadCSV, fmtDataCSV } from "@/lib/domain/csv";
+import { gerarPDFContratos } from "@/lib/pdf/contratos-pdf";
 import { percentualContratoUsado, saldoColor } from "@/lib/domain/saldo";
 import type { Carga, Cliente, Contrato, ContratoStatus, Local, OrdemCarregamento, Produto, Produtor, Terminal } from "@/lib/types";
 
@@ -66,7 +67,10 @@ export function ContratosClientView({
   const [search, setSearch] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<string>("");
   const [filtroOperacao, setFiltroOperacao] = useState<string>("");
+  const [filtroSafra, setFiltroSafra] = useState<string>("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [pagina, setPagina] = useState(1);
+  const [tamanhoPagina, setTamanhoPagina] = useState(25);
 
   // Operações distintas (pra preencher o select + cards)
   const operacoesUnicas = useMemo(() => {
@@ -75,22 +79,42 @@ export function ContratosClientView({
     return Array.from(set).sort();
   }, [contratos]);
 
+  // Safras distintas
+  const safrasUnicas = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of contratos) if (c.safra) set.add(c.safra);
+    return Array.from(set).sort();
+  }, [contratos]);
+
   const lista = useMemo(() => {
     const q = search.toLowerCase();
     return contratos.filter((c) => {
       if (filtroStatus && c.status !== filtroStatus) return false;
       if (filtroOperacao && c.operacao !== filtroOperacao) return false;
+      if (filtroSafra && c.safra !== filtroSafra) return false;
       const prod = produtores.find((p) => p.id === c.produtor_id)?.nome.toLowerCase() ?? "";
       const cli = clientes.find((cl) => cl.id === c.cliente_id)?.nome.toLowerCase() ?? "";
       const op = (c.operacao ?? "").toLowerCase();
+      const sf = (c.safra ?? "").toLowerCase();
       return (
         c.numero.toLowerCase().includes(q) ||
         prod.includes(q) ||
         cli.includes(q) ||
-        op.includes(q)
+        op.includes(q) ||
+        sf.includes(q)
       );
     });
-  }, [contratos, search, filtroStatus, filtroOperacao, produtores, clientes]);
+  }, [contratos, search, filtroStatus, filtroOperacao, filtroSafra, produtores, clientes]);
+
+  // Paginação client-side
+  const totalPaginas = Math.max(1, Math.ceil(lista.length / tamanhoPagina));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const inicio = (paginaAtual - 1) * tamanhoPagina;
+  const fim = inicio + tamanhoPagina;
+  const listaPaginada = useMemo(() => lista.slice(inicio, fim), [lista, inicio, fim]);
+
+  // Reset página quando filtros mudam
+  useMemo(() => { setPagina(1); }, [search, filtroStatus, filtroOperacao, filtroSafra, tamanhoPagina]);
 
   const stats = useMemo(() => {
     const ativos = contratos.filter((c) => c.status === "ativo");
@@ -149,7 +173,17 @@ export function ContratosClientView({
                 {operacoesUnicas.map((op) => <option key={op} value={op}>{op}</option>)}
               </select>
             )}
-            <SearchInput value={search} onChange={setSearch} placeholder="Número, produtor, cliente ou operação..." />
+            {safrasUnicas.length > 0 && (
+              <select
+                value={filtroSafra}
+                onChange={(e) => setFiltroSafra(e.target.value)}
+                style={{ padding: "8px 10px", border: "1.5px solid var(--border2)", borderRadius: "var(--radius)", fontSize: 12, fontFamily: "inherit" }}
+              >
+                <option value="">Todas safras</option>
+                {safrasUnicas.map((sf) => <option key={sf} value={sf}>{sf}</option>)}
+              </select>
+            )}
+            <SearchInput value={search} onChange={setSearch} placeholder="Número, produtor, cliente, operação ou safra..." />
             <Button
               size="sm"
               onClick={() =>
@@ -177,6 +211,26 @@ export function ContratosClientView({
               disabled={lista.length === 0}
             >
               📥 CSV
+            </Button>
+            <Button
+              size="sm"
+              onClick={() =>
+                gerarPDFContratos({
+                  contratos: lista,
+                  produtos,
+                  produtores,
+                  clientes,
+                  filtros: {
+                    status: filtroStatus || undefined,
+                    operacao: filtroOperacao || undefined,
+                    safra: filtroSafra || undefined,
+                    search: search || undefined,
+                  },
+                })
+              }
+              disabled={lista.length === 0}
+            >
+              📄 PDF
             </Button>
           </>
         }
@@ -242,7 +296,7 @@ export function ContratosClientView({
               </tr>
             </thead>
             <tbody>
-              {lista.map((c) => {
+              {listaPaginada.map((c) => {
                 const st = STATUS_OPTIONS.find((o) => o.v === c.status)!;
                 const prod = produtos.find((p) => p.id === c.produto_id);
                 const produtor = produtores.find((p) => p.id === c.produtor_id);
@@ -294,6 +348,58 @@ export function ContratosClientView({
               })}
             </tbody>
           </Table>
+        )}
+        {lista.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "12px 6px 2px",
+              borderTop: "1px solid var(--border)",
+              marginTop: 12,
+              gap: 12,
+              flexWrap: "wrap",
+              fontSize: 12,
+            }}
+          >
+            <div style={{ color: "var(--muted)" }}>
+              Mostrando{" "}
+              <strong style={{ color: "var(--g700)" }}>
+                {inicio + 1}–{Math.min(fim, lista.length)}
+              </strong>{" "}
+              de <strong style={{ color: "var(--g700)" }}>{lista.length}</strong> contratos
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <label style={{ color: "var(--muted)" }}>Por página:</label>
+              <select
+                value={tamanhoPagina}
+                onChange={(e) => setTamanhoPagina(Number(e.target.value))}
+                style={{ padding: "6px 8px", border: "1.5px solid var(--border2)", borderRadius: "var(--radius)", fontSize: 12, fontFamily: "inherit" }}
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <Button size="sm" onClick={() => setPagina(1)} disabled={paginaAtual === 1}>
+                ⏮
+              </Button>
+              <Button size="sm" onClick={() => setPagina((p) => Math.max(1, p - 1))} disabled={paginaAtual === 1}>
+                ← Anterior
+              </Button>
+              <span style={{ color: "var(--muted)", padding: "0 6px" }}>
+                Página <strong style={{ color: "var(--g700)" }}>{paginaAtual}</strong> de{" "}
+                <strong style={{ color: "var(--g700)" }}>{totalPaginas}</strong>
+              </span>
+              <Button size="sm" onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))} disabled={paginaAtual === totalPaginas}>
+                Próxima →
+              </Button>
+              <Button size="sm" onClick={() => setPagina(totalPaginas)} disabled={paginaAtual === totalPaginas}>
+                ⏭
+              </Button>
+            </div>
+          </div>
         )}
       </Card>
 
