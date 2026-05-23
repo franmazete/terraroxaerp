@@ -191,7 +191,7 @@ export function LocaisView({ dadosSSR = null }: Props) {
                 const temCoord = l.latitude != null && l.longitude != null;
                 return (
                   <tr key={l.id}>
-                    <td><span className={tableStyles.mono}>{l.id}</span></td>
+                    <td><span className={tableStyles.mono}>{l.codigo ?? "—"}</span></td>
                     <td><strong>{l.nome}</strong></td>
                     <td><Badge tone={tp.tone}>{tp.label}</Badge></td>
                     <td>{l.cidade} / {l.uf}</td>

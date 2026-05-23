@@ -213,7 +213,7 @@ export function ProdutoresClientesView({ tipo, dadosSSR = null }: Props) {
                 const tipoInfo = ehProdutor ? TIPOS_PRODUTOR.find((t) => t.v === (prod.tipo ?? "vendedor")) : null;
                 return (
                   <tr key={p.id}>
-                    <td><span className={tableStyles.mono}>{p.id}</span></td>
+                    <td><span className={tableStyles.mono}>{p.codigo ?? "—"}</span></td>
                     <td><strong>{p.nome}</strong></td>
                     {ehProdutor && <td>{prod.razao_social ?? <span style={{ color: "var(--hint)" }}>—</span>}</td>}
                     {ehProdutor && tipoInfo && <td><Badge tone={tipoInfo.tone}>{tipoInfo.label.split(" ")[0]}</Badge></td>}

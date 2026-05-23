@@ -185,7 +185,7 @@ export function TransportadorasView({ dadosSSR = null }: Props) {
                 const st = STATUS_OPTIONS.find((o) => o.v === t.status)!;
                 return (
                   <tr key={t.id}>
-                    <td><span className={tableStyles.mono}>{t.id}</span></td>
+                    <td><span className={tableStyles.mono}>{t.codigo ?? "—"}</span></td>
                     <td><strong>{t.razao_social}</strong></td>
                     <td>{t.nome_fantasia}</td>
                     <td className={tableStyles.mono}>{t.cnpj_cpf}</td>

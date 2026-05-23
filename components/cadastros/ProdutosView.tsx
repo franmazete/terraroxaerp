@@ -95,7 +95,7 @@ export function ProdutosView({ dadosSSR = null }: Props) {
             <tbody>
               {lista.map((p) => (
                 <tr key={p.id}>
-                  <td><span className={tableStyles.mono}>{p.id}</span></td>
+                  <td><span className={tableStyles.mono}>{p.codigo ?? "—"}</span></td>
                   <td><strong>{p.nome}</strong></td>
                   <td>{p.descricao ?? "—"}</td>
                   <td>

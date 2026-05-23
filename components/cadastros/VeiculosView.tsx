@@ -255,7 +255,7 @@ export function VeiculosView({ dadosSSR = null, transportadorasSSR = null }: Pro
             <tbody>
               {lista.map((v) => (
                 <tr key={v.id}>
-                  <td><span className={tableStyles.mono}>{v.id}</span></td>
+                  <td><span className={tableStyles.mono}>{v.codigo ?? "—"}</span></td>
                   <td className={tableStyles.mono}><strong>{v.placa_cavalo}</strong></td>
                   <td className={tableStyles.mono}>{v.placa_carreta || "—"}</td>
                   <td>{v.tipo}</td>

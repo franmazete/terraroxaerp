@@ -98,6 +98,8 @@ export type TransportadoraStatus = "ativa" | "inativa" | "pendente";
 
 export interface Transportadora {
   id: string;
+  /** Código sequencial pra exibição na UI (vem do Postgres IDENTITY). */
+  codigo?: number;
   razao_social: string;
   nome_fantasia: string;
   /** CNPJ ou CPF (autônomo). */
@@ -127,6 +129,7 @@ export interface Transportadora {
  */
 export interface Motorista {
   id: string;
+  codigo?: number;
   nome: string;
   cpf: string;
   cnh: string;
@@ -148,6 +151,7 @@ export type TipoVeiculo = "Bitrem" | "Rodotrem" | "Treminhão" | "Carreta Simple
  */
 export interface Veiculo {
   id: string;
+  codigo?: number;
   placa_cavalo: string;
   placa_carreta?: string;
   tipo: TipoVeiculo;
@@ -166,6 +170,7 @@ export type TipoProdutor = "vendedor" | "comprador" | "ambos";
 
 export interface Produtor {
   id: string;
+  codigo?: number;
   /** Nome da fazenda — apresentação principal. */
   nome: string;
   /** Razão social ou nome completo (pessoa física/jurídica). */
@@ -183,6 +188,7 @@ export interface Produtor {
 
 export interface Cliente {
   id: string;
+  codigo?: number;
   nome: string;
   cpf_cnpj: string;
   cidade: string;
@@ -197,6 +203,7 @@ export type TipoTerminal = "terminal" | "armazem" | "porto" | "cliente";
 
 export interface Terminal {
   id: string;
+  codigo?: number;
   nome: string;
   cnpj: string;
   cidade: string;
@@ -214,6 +221,7 @@ export type TipoLocal = "fazenda" | "armazem_origem" | "destino" | "porto" | "te
 
 export interface Local {
   id: string;
+  codigo?: number;
   nome: string;
   tipo: TipoLocal;
   cidade: string;
@@ -234,6 +242,7 @@ export interface Local {
 
 export interface Produto {
   id: string;
+  codigo?: number;
   nome: string;
   descricao?: string;
 }

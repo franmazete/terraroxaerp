@@ -262,7 +262,7 @@ export function MotoristasView({ dadosSSR = null, transportadorasSSR = null }: P
               {lista.map((m) => (
                 <tr key={m.id}>
                   <td><Avatar src={m.foto_url} nome={m.nome} size={36} ativo={m.ativo} /></td>
-                  <td><span className={tableStyles.mono}>{m.id}</span></td>
+                  <td><span className={tableStyles.mono}>{m.codigo ?? "—"}</span></td>
                   <td><strong>{m.nome}</strong></td>
                   <td className={tableStyles.mono}>{m.cpf}</td>
                   <td className={tableStyles.mono}>{m.cnh}</td>

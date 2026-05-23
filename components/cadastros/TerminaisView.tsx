@@ -175,7 +175,7 @@ export function TerminaisView({ dadosSSR = null }: Props) {
                 const tp = TIPOS.find((x) => x.v === t.tipo)!;
                 return (
                   <tr key={t.id}>
-                    <td><span className={tableStyles.mono}>{t.id}</span></td>
+                    <td><span className={tableStyles.mono}>{t.codigo ?? "—"}</span></td>
                     <td><strong>{t.nome}</strong></td>
                     <td><Badge tone={tp.tone}>{tp.label}</Badge></td>
                     <td className={tableStyles.mono}>{t.cnpj}</td>
