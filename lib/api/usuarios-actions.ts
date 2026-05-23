@@ -107,6 +107,77 @@ export async function excluirUsuarioAction(id: string): Promise<ActionResult> {
 }
 
 /* ───────────────────────────────────────────────────────────────────
+ * ALTERAR SENHA DIRETAMENTE (admin define nova senha sem enviar email)
+ *
+ * Usa supabase.auth.admin.updateUserById que é a API administrativa
+ * segura. A senha é atualizada IMEDIATAMENTE no Supabase Auth e o
+ * usuário pode logar com a nova senha já no próximo acesso.
+ *
+ * Requer:
+ *  - Solicitante seja perfil=admin
+ *  - Senha com pelo menos 6 caracteres
+ *  - O usuário-alvo precisa ter auth_user_id (criado via Supabase Auth)
+ * ─────────────────────────────────────────────────────────────────── */
+export async function alterarSenhaUsuarioAction(
+  usuarioId: string,
+  novaSenha: string,
+): Promise<{ ok: true } | { error: string }> {
+  const auth = await requireAdmin();
+  if ("error" in auth) return { error: auth.error };
+
+  if (!novaSenha || novaSenha.length < 6) {
+    return { error: "A senha precisa ter ao menos 6 caracteres." };
+  }
+  if (novaSenha.length > 72) {
+    return { error: "A senha não pode ter mais de 72 caracteres." };
+  }
+
+  const admin = createAdminClient();
+
+  // Busca o auth_user_id do usuário-alvo
+  const { data: usuario, error: errUser } = await admin
+    .from("usuarios")
+    .select("auth_user_id, email, nome")
+    .eq("id", usuarioId)
+    .single();
+
+  if (errUser || !usuario) {
+    return { error: "Usuário não encontrado no sistema." };
+  }
+  if (!usuario.auth_user_id) {
+    return {
+      error:
+        "Esse usuário ainda não tem login no Supabase Auth. Use o botão \"Convidar usuário\" para criar o acesso primeiro.",
+    };
+  }
+
+  // Atualiza a senha via API administrativa
+  const { error: errPwd } = await admin.auth.admin.updateUserById(usuario.auth_user_id, {
+    password: novaSenha,
+    // Limpa a flag de must_change_password (caso ainda exista)
+    user_metadata: { must_change_password: false },
+  });
+
+  if (errPwd) return { error: traduzirErro(errPwd) };
+
+  // Log opcional (não bloqueia se falhar)
+  try {
+    await admin.from("audit_log").insert({
+      tabela: "usuarios",
+      registro_id: usuarioId,
+      acao: "alterar_senha",
+      usuario_id: auth.userId,
+      payload: { email_alvo: usuario.email },
+    });
+  } catch {
+    // audit_log pode não existir ainda — silencia
+  }
+
+  revalidatePath("/configuracoes/usuarios");
+  return { ok: true };
+}
+
+/* ───────────────────────────────────────────────────────────────────
  * ENVIAR REDEFINIÇÃO DE SENHA
  *
  * Estratégia:

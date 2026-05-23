@@ -15,6 +15,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { fmtDate } from "@/lib/domain/format";
 import {
+  alterarSenhaUsuarioAction,
   atualizarUsuarioAction,
   enviarRedefinicaoSenhaAction,
 } from "@/lib/api/usuarios-actions";
@@ -60,6 +61,9 @@ export function UsuariosView({ usuariosSSR = null, transportadorasSSR = null }: 
   const { user: authUser, supabaseConfigured } = useAuth();
   const [salvando, setSalvando] = useState(false);
   const [redefinindo, setRedefinindo] = useState(false);
+  const [alterandoSenha, setAlterandoSenha] = useState(false);
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
   const [search, setSearch] = useState("");
   const [filtroPerfil, setFiltroPerfil] = useState<string>("");
   const [editing, setEditing] = useState<Usuario | null>(null);
@@ -89,7 +93,51 @@ export function UsuariosView({ usuariosSSR = null, transportadorasSSR = null }: 
       transp_id: u.transp_id ?? "",
       ativo: u.ativo,
     });
+    setNovaSenha("");
+    setConfirmarSenha("");
     setEditing(u);
+  }
+
+  async function alterarSenhaAgora() {
+    if (!editing?.id) return;
+    if (novaSenha.length < 6) {
+      toast.warn("A nova senha precisa ter ao menos 6 caracteres.");
+      return;
+    }
+    if (novaSenha !== confirmarSenha) {
+      toast.warn("As senhas digitadas não coincidem. Confirme novamente.");
+      return;
+    }
+    const ok = await confirmar({
+      titulo: "Alterar senha do usuário?",
+      mensagem: (
+        <>
+          A senha de <strong>{editing.email}</strong> será alterada imediatamente.
+          <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>
+            O usuário poderá acessar com a nova senha agora mesmo. Sessões antigas continuam ativas até expirarem.
+          </div>
+        </>
+      ),
+      variante: "danger",
+      confirmarLabel: "Alterar senha",
+    });
+    if (!ok) return;
+    setAlterandoSenha(true);
+    try {
+      const r = await alterarSenhaUsuarioAction(editing.id, novaSenha);
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(
+        `Senha de ${editing.email} alterada. O usuário já pode acessar com a nova senha.`,
+        "Senha atualizada",
+      );
+      setNovaSenha("");
+      setConfirmarSenha("");
+    } finally {
+      setAlterandoSenha(false);
+    }
   }
 
   async function salvar() {
@@ -315,6 +363,69 @@ export function UsuariosView({ usuariosSSR = null, transportadorasSSR = null }: 
               </Select>
             </Field>
           </FormRow>
+        )}
+
+        {/* ─── Seção Alterar Senha — só em edição + Supabase ─── */}
+        {editing?.id && supabaseConfigured && (
+          <>
+            <hr className="divider" style={{ margin: "20px 0 12px" }} />
+            <div
+              style={{
+                background: "var(--g100)",
+                border: "1.5px solid var(--g300)",
+                borderRadius: "var(--radius)",
+                padding: "14px 16px",
+                marginBottom: 8,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <span style={{ fontSize: 16 }}>🔐</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--g700)" }}>
+                    Alterar senha do usuário
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                    Define uma nova senha diretamente, sem envio de e-mail. O usuário acessa imediatamente.
+                  </div>
+                </div>
+              </div>
+              <FormRow>
+                <Field label="Nova senha *" hint="Mínimo 6 caracteres">
+                  <Input
+                    type="password"
+                    value={novaSenha}
+                    onChange={(e) => setNovaSenha(e.target.value)}
+                    placeholder="Digite a nova senha"
+                    autoComplete="new-password"
+                  />
+                </Field>
+                <Field label="Confirmar senha *">
+                  <Input
+                    type="password"
+                    value={confirmarSenha}
+                    onChange={(e) => setConfirmarSenha(e.target.value)}
+                    placeholder="Repita a nova senha"
+                    autoComplete="new-password"
+                  />
+                </Field>
+              </FormRow>
+              <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+                <Button
+                  variant="primary"
+                  onClick={alterarSenhaAgora}
+                  disabled={
+                    alterandoSenha ||
+                    salvando ||
+                    redefinindo ||
+                    !novaSenha ||
+                    !confirmarSenha
+                  }
+                >
+                  {alterandoSenha ? "Alterando..." : "🔐 Alterar senha"}
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </Modal>
     </>
