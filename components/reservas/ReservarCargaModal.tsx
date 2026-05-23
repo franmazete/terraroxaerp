@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { AlertBox } from "@/components/ui/AlertBox";
@@ -15,7 +15,8 @@ import { criarReservaAction } from "@/lib/api/actions";
 import { disponivelKg } from "@/lib/domain/saldo";
 import { fmtKg, fmtBRLNumber } from "@/lib/domain/format";
 import { transportadorasDb } from "@/lib/mock-data";
-import type { Carga, TipoVeiculo } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
+import type { Carga, TipoVeiculo, Transportadora } from "@/lib/types";
 
 interface Props {
   carga: Carga | null;
@@ -47,6 +48,38 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
   const [novoVeiOpen, setNovoVeiOpen] = useState(false);
   const [novoVei, setNovoVei] = useState<NovoVeiculo>(EMPTY_VEI);
 
+  // Estado da transportadora vinda do banco real (Supabase) — necessário porque
+  // o user.transp_id é UUID que não bate com o objeto mock transportadorasDb.
+  const [transpReal, setTranspReal] = useState<Transportadora | null>(null);
+  const [erroBuscarTransp, setErroBuscarTransp] = useState<string | null>(null);
+
+  // Busca a transportadora do user logado em modo Supabase
+  useEffect(() => {
+    if (!user?.transp_id || !supabaseConfigured || !carga) return;
+    let cancelado = false;
+    (async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("transportadoras")
+        .select("*")
+        .eq("id", user.transp_id)
+        .maybeSingle();
+      if (cancelado) return;
+      if (error || !data) {
+        setErroBuscarTransp(
+          "Não conseguimos carregar os dados da sua transportadora. Avise o administrador para verificar o vínculo do seu usuário.",
+        );
+        setTranspReal(null);
+      } else {
+        setErroBuscarTransp(null);
+        setTranspReal(data as Transportadora);
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [user?.transp_id, supabaseConfigured, carga]);
+
   const meusMotoristas = useMemo(
     () => motoristas.filter((m) => user?.transp_id && m.transp_ids.includes(user.transp_id) && m.ativo),
     [motoristas, user?.transp_id],
@@ -58,7 +91,33 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
 
   if (!carga || !user || user.role !== "transportadora" || !user.transp_id) return null;
 
-  const transp = transportadorasDb[user.transp_id];
+  // Em modo Supabase: usa transpReal (buscado do banco). Em modo mock: usa o dict legacy.
+  const transp: Transportadora | null = supabaseConfigured
+    ? transpReal
+    : (transportadorasDb[user.transp_id] as Transportadora | undefined) ?? null;
+
+  // Se não conseguiu carregar a transportadora, mostra mensagem clara
+  if (!transp) {
+    return (
+      <Modal open={!!carga} onClose={onClose} title="Reservar Carga">
+        <AlertBox tone="amber" icon="⚠️" title="Não foi possível carregar sua transportadora">
+          {erroBuscarTransp ?? "Aguardando dados da sua transportadora..."}
+          <div style={{ marginTop: 10, fontSize: 12 }}>
+            <strong>O que fazer:</strong>
+            <ul style={{ marginTop: 6, paddingLeft: 20, lineHeight: 1.6 }}>
+              <li>Confira com o administrador se seu usuário está vinculado a uma transportadora cadastrada.</li>
+              <li>O administrador pode editar o vínculo em <strong>Configurações → Usuários</strong>.</li>
+              <li>Se a transportadora foi recém-criada, tente recarregar a página.</li>
+            </ul>
+          </div>
+        </AlertBox>
+        <div style={{ marginTop: 16, textAlign: "right" }}>
+          <Button onClick={onClose}>Fechar</Button>
+        </div>
+      </Modal>
+    );
+  }
+
   const disp = disponivelKg(carga);
   const qtdN = typeof qtd === "number" ? qtd : 0;
   const freteN = typeof frete === "number" ? frete : 0;
@@ -212,9 +271,10 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
     }
 
     // ─── Modo mock (fallback) ────────────────────────────────────
+    // transp já foi validado como não-null acima
     const reserva = criarReserva(carga.id, {
       transp_id: user.transp_id,
-      transp_nome: transp.nome_fantasia,
+      transp_nome: transp!.nome_fantasia,
       motorista_id: mot.id,
       veiculo_id: vei.id,
       motorista: mot.nome,
