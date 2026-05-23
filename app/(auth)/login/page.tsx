@@ -53,11 +53,16 @@ export default function LoginPage() {
 
   return (
     <div className={s.screen}>
+      {/* Hero à esquerda — carrega /public/login-hero.jpg via CSS */}
+      <div className={s.hero} aria-hidden="true" />
+
+      {/* Painel direito com o card de login */}
+      <div className={s.cardPane}>
       <form className={s.card} onSubmit={onSubmit}>
         <div className={s.logo}>
           <div className={s.emoji}>🌾</div>
-          <h1>Portal de Cargas</h1>
-          <span>Terra Roxa Comércio de Cereais</span>
+          <h1>TERRA ROXA</h1>
+          <span>Portal de Cargas — Comércio de Cereais</span>
         </div>
 
         {/* Tabs de perfil só fazem sentido no modo mock (legacy).
@@ -149,6 +154,7 @@ export default function LoginPage() {
           </div>
         )}
       </form>
+      </div>
     </div>
   );
 }

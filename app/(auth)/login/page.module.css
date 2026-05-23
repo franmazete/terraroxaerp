@@ -1,47 +1,93 @@
+/* ════════════════════════════════════════════════════════════════════
+ * Tela de login — Split screen hero (desktop) / Stack (mobile)
+ *
+ * Imagem hero (caminhão + silos + logos das 2 empresas) ocupa 60% à
+ * esquerda. Card de login translúcido ocupa 40% à direita.
+ * Mobile (<900px): hero some, card ocupa tudo.
+ *
+ * Arquivo da imagem: /public/login-hero.jpg
+ * Quando não existe, fallback elegante com gradiente roxo.
+ * ════════════════════════════════════════════════════════════════════ */
+
 .screen {
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--g900) 0%, var(--g700) 50%, var(--g800) 100%);
+  display: grid;
+  grid-template-columns: 1fr 460px;
   position: relative;
   overflow: hidden;
+  background: linear-gradient(135deg, var(--g900) 0%, var(--g700) 50%, var(--g800) 100%);
 }
-.screen::before {
+
+/* Hero à esquerda: imagem cobrindo tudo + overlay sutil */
+.hero {
+  position: relative;
+  background-image: url("/login-hero.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-color: #1a1320; /* fallback enquanto carrega */
+}
+.hero::after {
+  /* Vinheta sutil pra dar profundidade na borda direita */
   content: "";
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(circle at 20% 50%, rgba(99, 186, 40, 0.15) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(201, 124, 0, 0.1) 0%, transparent 40%);
+  background: linear-gradient(to right, transparent 60%, rgba(0, 0, 0, 0.25) 100%);
   pointer-events: none;
 }
 
+/* Card de login à direita */
+.cardPane {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 28px;
+  background: linear-gradient(135deg, rgba(110, 30, 42, 0.95) 0%, rgba(58, 22, 78, 0.95) 100%);
+}
 .card {
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(8px);
   border-radius: var(--radius-xl);
-  padding: 40px;
-  width: 420px;
-  max-width: calc(100vw - 32px);
-  box-shadow: var(--shadow-lg);
+  padding: 36px 32px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   position: relative;
   z-index: 1;
 }
 
+/* Mobile: stack vertical, hero some */
+@media (max-width: 900px) {
+  .screen {
+    grid-template-columns: 1fr;
+    background: linear-gradient(135deg, var(--r600) 0%, var(--g700) 100%);
+  }
+  .hero {
+    display: none;
+  }
+  .cardPane {
+    padding: 24px 16px;
+    min-height: 100vh;
+    background: transparent;
+  }
+}
+
 .logo {
   text-align: center;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 .logo .emoji {
-  font-size: 36px;
+  font-size: 32px;
   margin-bottom: 6px;
 }
 .logo h1 {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--g700);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--r600);
+  letter-spacing: 0.02em;
 }
 .logo span {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -50,7 +96,7 @@
   background: var(--surf3);
   border-radius: var(--radius);
   padding: 3px;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
   gap: 3px;
 }
 .tab {
@@ -59,7 +105,7 @@
   text-align: center;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--muted);
   background: transparent;
@@ -77,8 +123,8 @@
 }
 .field label {
   display: block;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -87,44 +133,51 @@
 .field input,
 .field select {
   width: 100%;
-  padding: 10px 12px;
+  padding: 11px 12px;
   border: 1.5px solid var(--border2);
   border-radius: var(--radius);
   font-size: 13px;
   font-family: inherit;
   color: var(--text);
   background: var(--surface);
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 .field input:focus,
 .field select:focus {
   outline: none;
-  border-color: var(--g400);
+  border-color: var(--g600);
+  box-shadow: 0 0 0 3px rgba(135, 69, 163, 0.12);
 }
 
 .submit {
   width: 100%;
-  padding: 12px;
-  background: var(--g700);
+  padding: 13px;
+  background: linear-gradient(135deg, var(--g600) 0%, var(--g700) 100%);
   color: #fff;
   border: none;
   border-radius: var(--radius);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   font-family: inherit;
   cursor: pointer;
-  transition: background 0.2s;
-  margin-top: 6px;
+  transition: transform 0.15s, box-shadow 0.2s;
+  margin-top: 8px;
+  letter-spacing: 0.02em;
 }
-.submit:hover {
-  background: var(--g800);
+.submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(135, 69, 163, 0.35);
+}
+.submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .hint {
-  margin-top: 16px;
+  margin-top: 18px;
   background: var(--surf3);
   border-radius: var(--radius);
-  padding: 12px;
+  padding: 10px 12px;
 }
 .hint p {
   font-size: 11px;
@@ -147,8 +200,9 @@
   background: var(--r100);
   color: var(--r600);
   border-radius: var(--radius);
-  padding: 8px 10px;
-  font-size: 11px;
-  margin-bottom: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  margin-bottom: 12px;
   font-weight: 600;
+  border-left: 3px solid var(--r600);
 }
