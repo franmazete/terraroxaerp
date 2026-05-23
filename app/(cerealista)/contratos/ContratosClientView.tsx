@@ -16,7 +16,7 @@ import { useDataStore } from "@/lib/data-store";
 import { fmtKg, fmtDate } from "@/lib/domain/format";
 import { downloadCSV, fmtDataCSV } from "@/lib/domain/csv";
 import { percentualContratoUsado, saldoColor } from "@/lib/domain/saldo";
-import type { Carga, Cliente, Contrato, ContratoStatus, OrdemCarregamento, Produto, Produtor } from "@/lib/types";
+import type { Carga, Cliente, Contrato, ContratoStatus, Local, OrdemCarregamento, Produto, Produtor, Terminal } from "@/lib/types";
 
 const STATUS_OPTIONS: { v: ContratoStatus; label: string; tone: "green" | "teal" | "red" | "gray" }[] = [
   { v: "ativo", label: "Ativo", tone: "green" },
@@ -33,6 +33,8 @@ interface Props {
   clientesSSR: Cliente[] | null;
   cargasSSR: Carga[] | null;
   ordensSSR: OrdemCarregamento[] | null;
+  locaisSSR: Local[] | null;
+  terminaisSSR: Terminal[] | null;
 }
 
 /**
@@ -50,6 +52,8 @@ export function ContratosClientView({
   clientesSSR,
   cargasSSR,
   ordensSSR,
+  locaisSSR,
+  terminaisSSR,
 }: Props) {
   const store = useDataStore();
   const contratos = contratosSSR ?? store.contratos;
@@ -218,7 +222,15 @@ export function ContratosClientView({
         )}
       </Card>
 
-      <LancarContratoModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      <LancarContratoModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        produtoresSSR={produtoresSSR}
+        clientesSSR={clientesSSR}
+        produtosSSR={produtosSSR}
+        locaisSSR={locaisSSR}
+        terminaisSSR={terminaisSSR}
+      />
     </>
   );
 }

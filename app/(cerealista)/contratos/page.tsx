@@ -3,9 +3,11 @@ import {
   getCargas,
   getClientes,
   getContratos,
+  getLocais,
   getOrdens,
   getProdutores,
   getProdutos,
+  getTerminais,
 } from "@/lib/api/queries.server";
 
 const SUPABASE_CONFIGURED =
@@ -31,17 +33,21 @@ export default async function ContratosPage() {
         clientesSSR={null}
         cargasSSR={null}
         ordensSSR={null}
+        locaisSSR={null}
+        terminaisSSR={null}
       />
     );
   }
 
-  const [contratos, produtos, produtores, clientes, cargas, ordens] = await Promise.all([
+  const [contratos, produtos, produtores, clientes, cargas, ordens, locais, terminais] = await Promise.all([
     getContratos(),
     getProdutos(),
     getProdutores(),
     getClientes(),
     getCargas(),
     getOrdens(),
+    getLocais(),
+    getTerminais(),
   ]);
 
   return (
@@ -52,6 +58,8 @@ export default async function ContratosPage() {
       clientesSSR={clientes}
       cargasSSR={cargas}
       ordensSSR={ordens}
+      locaisSSR={locais}
+      terminaisSSR={terminais}
     />
   );
 }

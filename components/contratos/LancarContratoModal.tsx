@@ -11,10 +11,17 @@ import { useDataStore } from "@/lib/data-store";
 import { useToast } from "@/components/ui/Toast";
 import { useRouter } from "next/navigation";
 import { publicarContratoAction } from "@/lib/api/actions";
+import type { Cliente, Local, Produto, Produtor, Terminal } from "@/lib/types";
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** Listas vindas do Server Component (Supabase). Quando ausentes, cai no store mock. */
+  produtoresSSR?: Produtor[] | null;
+  clientesSSR?: Cliente[] | null;
+  produtosSSR?: Produto[] | null;
+  locaisSSR?: Local[] | null;
+  terminaisSSR?: Terminal[] | null;
 }
 
 /** Constante: peso de uma saca padrão de grãos (kg). */
@@ -55,11 +62,25 @@ const EMPTY: FormState = {
   observacoes: "",
 };
 
-export function LancarContratoModal({ open, onClose }: Props) {
+export function LancarContratoModal({
+  open,
+  onClose,
+  produtoresSSR = null,
+  clientesSSR = null,
+  produtosSSR = null,
+  locaisSSR = null,
+  terminaisSSR = null,
+}: Props) {
   const { user, supabaseConfigured } = useAuth();
   const toast = useToast();
   const router = useRouter();
-  const { produtores, clientes, produtos, locais, terminais, publicarContrato } = useDataStore();
+  const store = useDataStore();
+  const produtores = produtoresSSR ?? store.produtores;
+  const clientes = clientesSSR ?? store.clientes;
+  const produtos = produtosSSR ?? store.produtos;
+  const locais = locaisSSR ?? store.locais;
+  const terminais = terminaisSSR ?? store.terminais;
+  const { publicarContrato } = store;
   const [form, setForm] = useState<FormState>(EMPTY);
 
   const locaisOrigem = locais.filter((l) => l.tipo === "fazenda" || l.tipo === "armazem_origem");
