@@ -12,11 +12,17 @@ import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useRouter } from "next/navigation";
 import { criarReservaAction } from "@/lib/api/actions";
+import {
+  criarMotorista as criarMotoristaAction,
+  criarVeiculo as criarVeiculoAction,
+  vincularMotoristaTransp,
+  vincularVeiculoTransp,
+} from "@/lib/api/cadastros-actions";
 import { disponivelKg } from "@/lib/domain/saldo";
 import { fmtKg, fmtBRLNumber } from "@/lib/domain/format";
 import { transportadorasDb } from "@/lib/mock-data";
 import { createClient } from "@/lib/supabase/client";
-import type { Carga, TipoVeiculo, Transportadora } from "@/lib/types";
+import type { Carga, Motorista, TipoVeiculo, Transportadora, Veiculo } from "@/lib/types";
 
 interface Props {
   carga: Carga | null;
@@ -53,26 +59,64 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
   const [transpReal, setTranspReal] = useState<Transportadora | null>(null);
   const [erroBuscarTransp, setErroBuscarTransp] = useState<string | null>(null);
 
-  // Busca a transportadora do user logado em modo Supabase
+  // Motoristas e veículos da transp em modo Supabase (busca via Supabase client).
+  // O useDataStore retorna mock vazio em produção, então precisamos buscar do banco.
+  const [motoristasReais, setMotoristasReais] = useState<Motorista[]>([]);
+  const [veiculosReais, setVeiculosReais] = useState<Veiculo[]>([]);
+  const [salvandoMot, setSalvandoMot] = useState(false);
+  const [salvandoVei, setSalvandoVei] = useState(false);
+
+  // Busca a transportadora + motoristas + veículos do user logado em modo Supabase
   useEffect(() => {
     if (!user?.transp_id || !supabaseConfigured || !carga) return;
     let cancelado = false;
     (async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
+      const transpId = user.transp_id!;
+
+      // 1. Transportadora
+      const { data: transpData, error: errT } = await supabase
         .from("transportadoras")
         .select("*")
-        .eq("id", user.transp_id)
+        .eq("id", transpId)
         .maybeSingle();
       if (cancelado) return;
-      if (error || !data) {
+      if (errT || !transpData) {
         setErroBuscarTransp(
           "Não conseguimos carregar os dados da sua transportadora. Avise o administrador para verificar o vínculo do seu usuário.",
         );
         setTranspReal(null);
-      } else {
-        setErroBuscarTransp(null);
-        setTranspReal(data as Transportadora);
+        return;
+      }
+      setErroBuscarTransp(null);
+      setTranspReal(transpData as Transportadora);
+
+      // 2. Motoristas vinculados (via tabela N:N)
+      const { data: motData } = await supabase
+        .from("motoristas")
+        .select("*, motorista_transportadoras!inner(transp_id)")
+        .eq("motorista_transportadoras.transp_id", transpId)
+        .eq("ativo", true);
+      if (!cancelado) {
+        const motoristas = (motData ?? []).map((m: Record<string, unknown>) => ({
+          ...m,
+          transp_ids: [transpId],
+        })) as Motorista[];
+        setMotoristasReais(motoristas);
+      }
+
+      // 3. Veículos vinculados (via tabela N:N)
+      const { data: veiData } = await supabase
+        .from("veiculos")
+        .select("*, veiculo_transportadoras!inner(transp_id)")
+        .eq("veiculo_transportadoras.transp_id", transpId)
+        .eq("ativo", true);
+      if (!cancelado) {
+        const veiculos = (veiData ?? []).map((v: Record<string, unknown>) => ({
+          ...v,
+          transp_ids: [transpId],
+        })) as Veiculo[];
+        setVeiculosReais(veiculos);
       }
     })();
     return () => {
@@ -81,12 +125,18 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
   }, [user?.transp_id, supabaseConfigured, carga]);
 
   const meusMotoristas = useMemo(
-    () => motoristas.filter((m) => user?.transp_id && m.transp_ids.includes(user.transp_id) && m.ativo),
-    [motoristas, user?.transp_id],
+    () => {
+      if (supabaseConfigured) return motoristasReais;
+      return motoristas.filter((m) => user?.transp_id && m.transp_ids.includes(user.transp_id) && m.ativo);
+    },
+    [supabaseConfigured, motoristasReais, motoristas, user?.transp_id],
   );
   const meusVeiculos = useMemo(
-    () => veiculos.filter((v) => user?.transp_id && v.transp_ids.includes(user.transp_id) && v.ativo),
-    [veiculos, user?.transp_id],
+    () => {
+      if (supabaseConfigured) return veiculosReais;
+      return veiculos.filter((v) => user?.transp_id && v.transp_ids.includes(user.transp_id) && v.ativo);
+    },
+    [supabaseConfigured, veiculosReais, veiculos, user?.transp_id],
   );
 
   if (!carga || !user || user.role !== "transportadora" || !user.transp_id) return null;
@@ -160,6 +210,34 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
       return;
     }
 
+    if (supabaseConfigured) {
+      setSalvandoMot(true);
+      try {
+        const res = await criarMotoristaAction({
+          nome: novoMot.nome.trim(),
+          cpf: novoMot.cpf.trim(),
+          cnh: novoMot.cnh.trim(),
+          celular: novoMot.celular.trim() || "—",
+          transp_ids: [user.transp_id],
+        });
+        if ("error" in res) {
+          toast.error(res.error);
+          return;
+        }
+        const novo = res.data as Motorista;
+        // Adiciona à lista local pra aparecer no select imediatamente
+        setMotoristasReais((arr) => [...arr, novo]);
+        setMotoristaId(novo.id);
+        setNovoMot(EMPTY_MOT);
+        setNovoMotOpen(false);
+        toast.success(`Motorista "${novo.nome}" cadastrado.`);
+      } finally {
+        setSalvandoMot(false);
+      }
+      return;
+    }
+
+    // Modo mock (fallback)
     const m = addMotorista({ ...novoMot, transp_ids: [user.transp_id], ativo: true });
     setMotoristaId(m.id);
     setNovoMot(EMPTY_MOT);
@@ -202,6 +280,34 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
       return;
     }
 
+    if (supabaseConfigured) {
+      setSalvandoVei(true);
+      try {
+        const res = await criarVeiculoAction({
+          placa_cavalo: novoVei.placa_cavalo.toUpperCase().trim(),
+          placa_carreta: novoVei.placa_carreta.toUpperCase().trim() || undefined,
+          tipo: novoVei.tipo,
+          capacidade_kg: novoVei.capacidade_kg,
+          transp_ids: [user.transp_id],
+        });
+        if ("error" in res) {
+          toast.error(res.error);
+          return;
+        }
+        const novo = res.data as Veiculo;
+        // Adiciona à lista local pra aparecer no select imediatamente
+        setVeiculosReais((arr) => [...arr, novo]);
+        setVeiculoId(novo.id);
+        setNovoVei(EMPTY_VEI);
+        setNovoVeiOpen(false);
+        toast.success(`Veículo "${novo.placa_cavalo}" cadastrado.`);
+      } finally {
+        setSalvandoVei(false);
+      }
+      return;
+    }
+
+    // Modo mock (fallback)
     const v = addVeiculo({
       placa_cavalo: novoVei.placa_cavalo,
       placa_carreta: novoVei.placa_carreta || undefined,
@@ -346,24 +452,27 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
       )}
 
       <SectionLabel>Motorista</SectionLabel>
-      <FormRow>
-        <Field
-          label={`Motorista * (${meusMotoristas.length} cadastrados)`}
-          hint={meusMotoristas.length === 0 ? "Você não tem motoristas cadastrados — clique em '+ Cadastrar novo'." : undefined}
-        >
-          <Select value={motoristaId} onChange={(e) => setMotoristaId(e.target.value)}>
+      <Field
+        label={`Motorista * (${meusMotoristas.length} cadastrado${meusMotoristas.length !== 1 ? "s" : ""})`}
+        hint={meusMotoristas.length === 0 ? "Você não tem motoristas cadastrados — clique no '+ Novo' pra cadastrar rapidamente." : "Clique no '+ Novo' pra cadastrar outro motorista sem sair desta tela."}
+      >
+        <div style={{ display: "flex", gap: 6 }}>
+          <Select value={motoristaId} onChange={(e) => setMotoristaId(e.target.value)} style={{ flex: 1 }}>
             <option value="">Selecione o motorista...</option>
             {meusMotoristas.map((m) => (
               <option key={m.id} value={m.id}>{m.nome} — CPF {m.cpf} — CNH {m.cnh}</option>
             ))}
           </Select>
-        </Field>
-        <Field label="—">
-          <Button onClick={() => setNovoMotOpen((v) => !v)}>
-            {novoMotOpen ? "Fechar cadastro rápido" : "＋ Cadastrar novo motorista"}
+          <Button
+            size="sm"
+            variant={novoMotOpen ? "danger" : "success"}
+            onClick={() => setNovoMotOpen((v) => !v)}
+            title={novoMotOpen ? "Fechar cadastro rápido" : "Cadastrar novo motorista sem fechar este modal"}
+          >
+            {novoMotOpen ? "× Fechar" : "+ Novo"}
           </Button>
-        </Field>
-      </FormRow>
+        </div>
+      </Field>
 
       {novoMotOpen && (
         <div style={{ background: "var(--surf2)", padding: 14, borderRadius: "var(--radius)", marginBottom: 14, border: "1px dashed var(--g400)" }}>
@@ -390,20 +499,20 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
             </Field>
           </FormRow>
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
-            <Button variant="success" onClick={cadastrarMotorista}>
-              ✓ Salvar motorista e usar nesta reserva
+            <Button variant="success" onClick={cadastrarMotorista} disabled={salvandoMot}>
+              {salvandoMot ? "Salvando..." : "✓ Salvar motorista e usar nesta reserva"}
             </Button>
           </div>
         </div>
       )}
 
       <SectionLabel>Veículo</SectionLabel>
-      <FormRow>
-        <Field
-          label={`Veículo * (${meusVeiculos.length} cadastrados)`}
-          hint={meusVeiculos.length === 0 ? "Você não tem veículos cadastrados — clique em '+ Cadastrar novo'." : undefined}
-        >
-          <Select value={veiculoId} onChange={(e) => setVeiculoId(e.target.value)}>
+      <Field
+        label={`Veículo * (${meusVeiculos.length} cadastrado${meusVeiculos.length !== 1 ? "s" : ""})`}
+        hint={meusVeiculos.length === 0 ? "Você não tem veículos cadastrados — clique no '+ Novo' pra cadastrar rapidamente." : "Clique no '+ Novo' pra cadastrar outro veículo sem sair desta tela."}
+      >
+        <div style={{ display: "flex", gap: 6 }}>
+          <Select value={veiculoId} onChange={(e) => setVeiculoId(e.target.value)} style={{ flex: 1 }}>
             <option value="">Selecione o veículo...</option>
             {meusVeiculos.map((v) => (
               <option key={v.id} value={v.id}>
@@ -411,13 +520,16 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
               </option>
             ))}
           </Select>
-        </Field>
-        <Field label="—">
-          <Button onClick={() => setNovoVeiOpen((v) => !v)}>
-            {novoVeiOpen ? "Fechar cadastro rápido" : "＋ Cadastrar novo veículo"}
+          <Button
+            size="sm"
+            variant={novoVeiOpen ? "danger" : "success"}
+            onClick={() => setNovoVeiOpen((v) => !v)}
+            title={novoVeiOpen ? "Fechar cadastro rápido" : "Cadastrar novo veículo sem fechar este modal"}
+          >
+            {novoVeiOpen ? "× Fechar" : "+ Novo"}
           </Button>
-        </Field>
-      </FormRow>
+        </div>
+      </Field>
 
       {novoVeiOpen && (
         <div style={{ background: "var(--surf2)", padding: 14, borderRadius: "var(--radius)", marginBottom: 14, border: "1px dashed var(--g400)" }}>
@@ -451,8 +563,8 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
             </Field>
           </FormRow>
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
-            <Button variant="success" onClick={cadastrarVeiculo}>
-              ✓ Salvar veículo e usar nesta reserva
+            <Button variant="success" onClick={cadastrarVeiculo} disabled={salvandoVei}>
+              {salvandoVei ? "Salvando..." : "✓ Salvar veículo e usar nesta reserva"}
             </Button>
           </div>
         </div>
