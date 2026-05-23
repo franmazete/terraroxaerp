@@ -38,7 +38,7 @@ interface FormState {
   destino_local_id: string;
   terminal_id: string;
   data_emissao: string;
-  data_vencimento: string;
+  data_vencto_financeiro: string;
   /** R$ por saca de 60 kg (convenção do mercado). */
   valor_saca: number | "";
   valor_total: number | "";
@@ -56,7 +56,7 @@ const EMPTY: FormState = {
   destino_local_id: "",
   terminal_id: "",
   data_emissao: new Date().toISOString().split("T")[0],
-  data_vencimento: "",
+  data_vencto_financeiro: "",
   valor_saca: "",
   valor_total: "",
   observacoes: "",
@@ -149,7 +149,7 @@ export function LancarContratoModal({
         cliente_id: form.cliente_id || undefined,
         destino_local_id: form.destino_local_id || undefined,
         data_emissao: form.data_emissao || undefined,
-        data_vencimento: form.data_vencimento || undefined,
+        data_vencto_financeiro: form.data_vencto_financeiro || undefined,
         valor_unitario: valorUnitarioKg,
         valor_total: form.valor_total === "" ? undefined : (form.valor_total as number),
         observacoes: form.observacoes || undefined,
@@ -179,7 +179,7 @@ export function LancarContratoModal({
       destino_local_id: form.destino_local_id || undefined,
       terminal_id: form.terminal_id || undefined,
       data_emissao: form.data_emissao || undefined,
-      data_vencimento: form.data_vencimento || undefined,
+      data_vencto_financeiro: form.data_vencto_financeiro || undefined,
       valor_unitario: valorUnitarioKg,
       valor_total: form.valor_total === "" ? undefined : form.valor_total,
       observacoes: form.observacoes || undefined,
@@ -229,7 +229,7 @@ export function LancarContratoModal({
           <Input type="date" value={form.data_emissao} onChange={(e) => setForm({ ...form, data_emissao: e.target.value })} />
         </Field>
         <Field label="Data de Vencimento">
-          <Input type="date" value={form.data_vencimento} onChange={(e) => setForm({ ...form, data_vencimento: e.target.value })} />
+          <Input type="date" value={form.data_vencto_financeiro} onChange={(e) => setForm({ ...form, data_vencto_financeiro: e.target.value })} />
         </Field>
       </FormRow>
 

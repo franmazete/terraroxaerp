@@ -51,7 +51,7 @@ export async function publicarContratoAction(input: {
   cliente_id?: string;
   destino_local_id?: string;
   data_emissao?: string;
-  data_vencimento?: string;
+  data_vencto_financeiro?: string;
   valor_unitario?: number;
   valor_total?: number;
   observacoes?: string;

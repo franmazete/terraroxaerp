@@ -153,7 +153,7 @@ export function ContratoDetalheClientView({
         <StatBox tone="b" label="Quantidade Total" value={fmtKg(contrato.qtd_kg_total)} />
         <StatBox tone="g" label="Saldo Restante" value={fmtKg(contrato.saldo_kg)} sub={`${100 - pct}% disponível`} />
         <StatBox tone="a" label="Já em Cargas" value={fmtKg(contrato.qtd_kg_total - contrato.saldo_kg)} sub={`${pct}% utilizado`} />
-        <StatBox tone="t" label="Vigência" value={`${fmtDate(contrato.data_emissao ?? "")} → ${fmtDate(contrato.data_vencimento ?? "")}`} />
+        <StatBox tone="t" label="Vigência" value={`${fmtDate(contrato.data_emissao ?? "")} → ${fmtDate(contrato.data_vencto_financeiro ?? "")}`} />
       </div>
 
       <Card className="section-gap">
@@ -200,8 +200,8 @@ export function ContratoDetalheClientView({
               {contrato.data_emissao && (
                 <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Data de Emissão</td><td>{fmtDate(contrato.data_emissao)}</td></tr>
               )}
-              {contrato.data_vencimento && (
-                <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Data de Vencimento</td><td>{fmtDate(contrato.data_vencimento)}</td></tr>
+              {contrato.data_vencto_financeiro && (
+                <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Data de Vencimento</td><td>{fmtDate(contrato.data_vencto_financeiro)}</td></tr>
               )}
               {typeof contrato.valor_unitario === "number" && (
                 <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Valor Unitário</td><td><strong>{fmtBRL(contrato.valor_unitario)} / kg</strong></td></tr>

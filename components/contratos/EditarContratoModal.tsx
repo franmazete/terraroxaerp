@@ -49,7 +49,7 @@ export function EditarContratoModal({ contrato, onClose }: Props) {
     setDestinoLocalId(contrato.destino_local_id ?? "");
     setTerminalId(contrato.terminal_id ?? "");
     setDataEmissao(contrato.data_emissao ?? "");
-    setDataVencimento(contrato.data_vencimento ?? "");
+    setDataVencimento(contrato.data_vencto_financeiro ?? "");
     setValorTotal(contrato.valor_total ?? "");
     // R$/kg → R$/saca (60kg)
     setValorSaca(typeof contrato.valor_unitario === "number" ? +(contrato.valor_unitario * KG_POR_SACA).toFixed(2) : "");
@@ -103,7 +103,7 @@ export function EditarContratoModal({ contrato, onClose }: Props) {
       destino_local_id: destinoLocalId || undefined,
       terminal_id: terminalId || undefined,
       data_emissao: dataEmissao || undefined,
-      data_vencimento: dataVencimento || undefined,
+      data_vencto_financeiro: dataVencimento || undefined,
       valor_unitario: valorUnitarioKg,
       valor_total: valorTotal === "" ? undefined : valorTotal,
       observacoes: observacoes || undefined,

@@ -185,10 +185,10 @@ export function PublicarCargaModal({ open, onClose, contratoIdInicial }: Props) 
               <div style={{ fontSize: 10, color: "var(--hint)", textTransform: "uppercase", letterSpacing: ".06em" }}>Saldo Contrato</div>
               <div style={{ fontWeight: 700, color: "var(--g700)" }}>{fmtKg(contrato.saldo_kg)}</div>
             </div>
-            {contrato.data_vencimento && (
+            {contrato.data_vencto_financeiro && (
               <div>
                 <div style={{ fontSize: 10, color: "var(--hint)", textTransform: "uppercase", letterSpacing: ".06em" }}>Vence em</div>
-                <div style={{ fontWeight: 600 }}>{fmtDate(contrato.data_vencimento)}</div>
+                <div style={{ fontWeight: 600 }}>{fmtDate(contrato.data_vencto_financeiro)}</div>
               </div>
             )}
             {typeof contrato.valor_unitario === "number" && (

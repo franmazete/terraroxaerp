@@ -128,7 +128,7 @@ export function ContratosClientView({
                     { header: "Status", value: (c) => c.status },
                     { header: "Disponível", value: (c) => (c.disponivel ? "Sim" : "Não") },
                     { header: "Emissão", value: (c) => fmtDataCSV(c.data_emissao) },
-                    { header: "Vencimento", value: (c) => fmtDataCSV(c.data_vencimento) },
+                    { header: "Vencimento", value: (c) => fmtDataCSV(c.data_vencto_financeiro) },
                   ],
                   `contratos_${new Date().toISOString().split("T")[0]}`,
                 )
@@ -197,7 +197,7 @@ export function ContratosClientView({
                     <td>{cliente?.nome ?? <span style={{ color: "var(--hint)" }}>—</span>}</td>
                     <td>
                       <div style={{ fontSize: 11 }}>{c.data_emissao ? fmtDate(c.data_emissao) : "—"}</div>
-                      <div style={{ fontSize: 10, color: "var(--hint)" }}>→ {c.data_vencimento ? fmtDate(c.data_vencimento) : "—"}</div>
+                      <div style={{ fontSize: 10, color: "var(--hint)" }}>→ {c.data_vencto_financeiro ? fmtDate(c.data_vencto_financeiro) : "—"}</div>
                     </td>
                     <td>
                       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>

@@ -276,12 +276,28 @@ export interface Contrato {
   porto_id?: string;
   /** Data de emissão do contrato (opcional). */
   data_emissao?: string;
-  /** Data de vencimento do contrato (opcional). */
-  data_vencimento?: string;
+  /** Data de vencimento financeiro (antes era data_vencimento). */
+  data_vencto_financeiro?: string;
+  /** Data inicial de validade do contrato (vem do CSV DTINICIO). */
+  data_inicio?: string;
+  /** Data final de validade do contrato (vem do CSV DTFINAL). */
+  data_fim?: string;
+  /** Safra (ex: "26-2026") — vem do CSV DESCSAFRA. */
+  safra?: string;
+  /** Código do estabelecimento no ERP de origem (ex: "5", "6") — INFORMATIVO. */
+  empresa_origem_codigo?: string;
+  /** Número do contrato no ERP de origem (ex: "5.328"). */
+  numero_origem?: string;
+  /** Texto livre da origem (cidade/UF/razão social) — não relaciona com locais. */
+  origem_descricao?: string;
   /** Valor por kg em R$ (opcional). */
   valor_unitario?: number;
+  /** R$/saca de 60kg (convenção do mercado de grãos). */
+  valor_unitario_saca?: number;
   /** Valor total em R$ (opcional, normalmente unitário × qtd_kg_total). */
   valor_total?: number;
+  /** Saldo financeiro restante em R$ (do CSV NVLRSALDO). */
+  valor_saldo?: number;
   observacoes?: string;
   anexos: AnexoContrato[];
   status: ContratoStatus;
