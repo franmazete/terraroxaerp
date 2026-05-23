@@ -15,7 +15,7 @@ import { fmtDate } from "@/lib/domain/format";
 import { ConvidarUsuarioModal } from "./ConvidarUsuarioModal";
 import { CadastroHeader } from "./CadastroHeader";
 import { SearchInput } from "./SearchInput";
-import type { Perfil, Usuario } from "@/lib/types";
+import type { Perfil, Transportadora, Usuario } from "@/lib/types";
 
 const PERFIS: { v: Perfil; label: string; tone: "blue" | "green" | "amber" | "red" | "teal" | "gray" }[] = [
   { v: "admin", label: "Administrador", tone: "red" },
@@ -37,8 +37,17 @@ interface FormState {
 
 const EMPTY: FormState = { email: "", nome: "", perfil: "logistica", transp_id: "", ativo: true };
 
-export function UsuariosView() {
-  const { usuarios, transportadoras, addUsuario, updateUsuario } = useDataStore();
+interface Props {
+  /** Dados SSR. Quando ausentes, cai no useDataStore (mock). */
+  usuariosSSR?: Usuario[] | null;
+  transportadorasSSR?: Transportadora[] | null;
+}
+
+export function UsuariosView({ usuariosSSR = null, transportadorasSSR = null }: Props) {
+  const store = useDataStore();
+  const usuarios = usuariosSSR ?? store.usuarios;
+  const transportadoras = transportadorasSSR ?? store.transportadoras;
+  const { addUsuario, updateUsuario } = store;
   const toast = useToast();
   const { user: authUser } = useAuth();
   const [search, setSearch] = useState("");
@@ -126,7 +135,11 @@ export function UsuariosView() {
         }
       />
 
-      <ConvidarUsuarioModal open={convidarOpen} onClose={() => setConvidarOpen(false)} />
+      <ConvidarUsuarioModal
+        open={convidarOpen}
+        onClose={() => setConvidarOpen(false)}
+        transportadorasSSR={transportadorasSSR}
+      />
 
       <Card>
         {lista.length === 0 ? (
@@ -150,7 +163,7 @@ export function UsuariosView() {
                 const p = PERFIS.find((x) => x.v === u.perfil)!;
                 return (
                   <tr key={u.id}>
-                    <td><span className={tableStyles.mono}>{u.id}</span></td>
+                    <td><span className={tableStyles.mono} title={u.id}>{u.id.slice(0, 8)}…</span></td>
                     <td><strong>{u.nome}</strong></td>
                     <td>{u.email}</td>
                     <td><Badge tone={p.tone}>{p.label}</Badge></td>

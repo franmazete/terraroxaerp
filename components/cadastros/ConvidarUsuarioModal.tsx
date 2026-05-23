@@ -9,11 +9,13 @@ import { Field, FormRow, Input, Select } from "@/components/ui/Form";
 import { useDataStore } from "@/lib/data-store";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/auth/AuthContext";
-import type { Perfil } from "@/lib/types";
+import type { Perfil, Transportadora } from "@/lib/types";
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** Dados SSR. Quando ausente, cai no useDataStore (mock). */
+  transportadorasSSR?: Transportadora[] | null;
 }
 
 const PERFIS: { v: Perfil; label: string }[] = [
@@ -25,10 +27,11 @@ const PERFIS: { v: Perfil; label: string }[] = [
   { v: "transportadora", label: "Transportadora" },
 ];
 
-export function ConvidarUsuarioModal({ open, onClose }: Props) {
+export function ConvidarUsuarioModal({ open, onClose, transportadorasSSR = null }: Props) {
   const toast = useToast();
   const { supabaseConfigured } = useAuth();
-  const { transportadoras } = useDataStore();
+  const store = useDataStore();
+  const transportadoras = transportadorasSSR ?? store.transportadoras;
   const [email, setEmail] = useState("");
   const [nome, setNome] = useState("");
   const [perfil, setPerfil] = useState<Perfil>("logistica");
