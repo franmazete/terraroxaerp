@@ -1,28 +1,32 @@
 /* ════════════════════════════════════════════════════════════════════
- * Edge Function: import-contratos-csv
+ * Edge Function: import-contratos-csv (v2)
  *
- * Lê CSVs de Supabase Storage bucket "importacoes/contratos/pendentes/",
- * processa cada arquivo importando contratos pro banco, e move o arquivo
- * pra "processados/<timestamp>/". Linhas com erro vão pra um CSV em
- * "erros/<timestamp>_<arquivo>.csv".
+ * Layout v2 traz dados completos do produtor:
+ *   P_PRODUTOR, P_DOCCPF, P_NOMEFAZENDA, P_CIDADE_PRODUTOR
  *
- * Invocação:
- *   - Manual: curl -X POST <function-url> -H "Authorization: Bearer <token>"
- *   - Cron: configurar pg_cron pra invocar periodicamente
+ * Comportamento:
+ *   - De-para de PRODUTO por nome (rejeita se não cadastrado)
+ *   - De-para de PRODUTOR por CPF/CNPJ (cria se não existe;
+ *     atualiza dados faltantes se já existe)
+ *   - Classifica produtor: tipo='vendedor' quando contrato=COMPRA
+ *   - Upsert do contrato pelo numero (idempotente)
+ *   - Move CSV pra processados/, gera CSV de erros se houver
+ *   - Loga em importacao_log
  * ════════════════════════════════════════════════════════════════════ */
 
-// @ts-expect-error Deno globals
+// @ts-expect-error Deno
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-// @ts-expect-error - import via URL é padrão Deno
+// @ts-expect-error Deno
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   decodeLatin1,
-  extrairNome,
+  extrairCodigoNome,
+  normalizarDoc,
   normalizarNome,
+  parseCidadeUF,
   parseCSV,
   parseDataPtBR,
   parseNumberPtBR,
-  parseOrigem,
   type LinhaCSV,
 } from "./parser.ts";
 
@@ -34,7 +38,8 @@ const PASTA_ERROS = "contratos/erros";
 interface RelatorioLinha {
   linha: number;
   contrato: string;
-  status: "importada" | "rejeitada";
+  status: "importada" | "rejeitada" | "atualizada";
+  produtor_acao?: "criado" | "atualizado" | "ja_existia";
   motivo?: string;
 }
 
@@ -44,31 +49,25 @@ interface RelatorioArquivo {
   importadas: number;
   rejeitadas: number;
   produtores_criados: number;
+  produtores_atualizados: number;
   linhas: RelatorioLinha[];
 }
 
-// @ts-expect-error Deno globals
+// @ts-expect-error Deno
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders() });
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders() });
 
   try {
-    // @ts-expect-error Deno globals
+    // @ts-expect-error Deno
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    // @ts-expect-error Deno globals
+    // @ts-expect-error Deno
     const SUPABASE_SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
 
-    // 1. Lista arquivos pendentes
     const { data: arquivos, error: errList } = await supabase.storage
       .from(BUCKET)
       .list(PASTA_PENDENTES, { limit: 100 });
-
-    if (errList) {
-      return json({ error: `Falha ao listar arquivos: ${errList.message}` }, 500);
-    }
-
+    if (errList) return json({ error: `Falha ao listar: ${errList.message}` }, 500);
     if (!arquivos || arquivos.length === 0) {
       return json({ ok: true, processados: 0, mensagem: "Nenhum arquivo pendente" });
     }
@@ -78,17 +77,12 @@ serve(async (req: Request) => {
 
     for (const arquivo of csvs) {
       try {
-        const rel = await processarArquivo(supabase, arquivo.name);
-        relatorios.push(rel);
+        relatorios.push(await processarArquivo(supabase, arquivo.name));
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`Erro processando ${arquivo.name}:`, msg);
         relatorios.push({
-          arquivo: arquivo.name,
-          total: 0,
-          importadas: 0,
-          rejeitadas: 0,
-          produtores_criados: 0,
+          arquivo: arquivo.name, total: 0, importadas: 0, rejeitadas: 0,
+          produtores_criados: 0, produtores_atualizados: 0,
           linhas: [{ linha: 0, contrato: "", status: "rejeitada", motivo: `Erro geral: ${msg}` }],
         });
       }
@@ -96,216 +90,167 @@ serve(async (req: Request) => {
 
     return json({ ok: true, processados: relatorios.length, relatorios });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return json({ error: msg }, 500);
+    return json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }
 });
 
-/**
- * Processa um arquivo CSV: parse → de-para → insert → move/loga.
- */
-async function processarArquivo(supabase: ReturnType<typeof createClient>, nome: string): Promise<RelatorioArquivo> {
+async function processarArquivo(
+  supabase: ReturnType<typeof createClient>,
+  nome: string,
+): Promise<RelatorioArquivo> {
   const caminhoOrigem = `${PASTA_PENDENTES}/${nome}`;
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 
-  // Cria entrada no audit log
   const { data: logRow } = await supabase
     .from("importacao_log")
-    .insert({
-      tipo: "contratos",
-      arquivo: nome,
-      status: "processando",
-    })
+    .insert({ tipo: "contratos", arquivo: nome, status: "processando" })
     .select("id")
     .single();
   const logId = logRow?.id as string | undefined;
 
-  // 1. Download
   const { data: blob, error: errDown } = await supabase.storage.from(BUCKET).download(caminhoOrigem);
-  if (errDown || !blob) throw new Error(`Download falhou: ${errDown?.message ?? "blob vazio"}`);
+  if (errDown || !blob) throw new Error(`Download: ${errDown?.message ?? "blob vazio"}`);
 
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const texto = decodeLatin1(bytes);
   const linhas = parseCSV(texto);
 
-  // 2. Carrega lookups em memória (produtos + produtores existentes)
+  // Lookups
   const { data: produtos } = await supabase.from("produtos").select("id, nome");
-  const { data: produtores } = await supabase.from("produtores").select("id, nome");
+  const { data: produtores } = await supabase.from("produtores").select("id, nome, cpf_cnpj");
 
-  const produtosMap = new Map<string, string>(); // nome normalizado → id
+  const produtosMap = new Map<string, string>();
   for (const p of produtos ?? []) produtosMap.set(normalizarNome(p.nome), p.id);
-  const produtoresMap = new Map<string, string>();
-  for (const p of produtores ?? []) produtoresMap.set(normalizarNome(p.nome), p.id);
 
-  // 3. Processa cada linha
-  const relatorioLinhas: RelatorioLinha[] = [];
-  let importadas = 0;
-  let rejeitadas = 0;
-  let produtoresCriados = 0;
-
-  for (const linha of linhas) {
-    const resultado = await processarLinha(supabase, linha, produtosMap, produtoresMap);
-    relatorioLinhas.push(resultado.relatorio);
-    if (resultado.relatorio.status === "importada") importadas++;
-    else rejeitadas++;
-    if (resultado.produtorCriado) produtoresCriados++;
+  const produtoresPorDoc = new Map<string, { id: string; nome: string }>();
+  for (const p of produtores ?? []) {
+    const doc = normalizarDoc(p.cpf_cnpj);
+    if (doc) produtoresPorDoc.set(doc, { id: p.id, nome: p.nome });
   }
 
-  // 4. Salva CSV de erros (se houver)
+  let importadas = 0, rejeitadas = 0;
+  let produtoresCriados = 0, produtoresAtualizados = 0;
+  const relatorioLinhas: RelatorioLinha[] = [];
+
+  for (const linha of linhas) {
+    const r = await processarLinha(supabase, linha, produtosMap, produtoresPorDoc);
+    relatorioLinhas.push(r.relatorio);
+    if (r.relatorio.status === "rejeitada") rejeitadas++;
+    else importadas++;
+    if (r.produtor_acao === "criado") produtoresCriados++;
+    else if (r.produtor_acao === "atualizado") produtoresAtualizados++;
+  }
+
+  // CSV de erros
   let arquivoErros: string | null = null;
   const errosCsv = gerarCSVErros(relatorioLinhas);
   if (errosCsv) {
     arquivoErros = `${PASTA_ERROS}/${timestamp}_${nome}`;
     await supabase.storage.from(BUCKET).upload(arquivoErros, new Blob([errosCsv], { type: "text/csv" }), {
-      contentType: "text/csv",
-      upsert: true,
+      contentType: "text/csv", upsert: true,
     });
   }
 
-  // 5. Move o arquivo original pra processados
-  const caminhoDestino = `${PASTA_PROCESSADOS}/${timestamp}/${nome}`;
-  await supabase.storage.from(BUCKET).move(caminhoOrigem, caminhoDestino);
+  // Move arquivo
+  await supabase.storage.from(BUCKET).move(caminhoOrigem, `${PASTA_PROCESSADOS}/${timestamp}/${nome}`);
 
-  // 6. Atualiza log
+  // Atualiza log
   const status = rejeitadas === 0 ? "sucesso" : importadas > 0 ? "sucesso_parcial" : "erro";
   if (logId) {
-    await supabase
-      .from("importacao_log")
-      .update({
-        concluida_em: new Date().toISOString(),
-        total_linhas: linhas.length,
-        importadas,
-        rejeitadas,
-        produtores_criados: produtoresCriados,
-        arquivo_erros: arquivoErros,
-        status,
-      })
-      .eq("id", logId);
+    await supabase.from("importacao_log").update({
+      concluida_em: new Date().toISOString(),
+      total_linhas: linhas.length, importadas, rejeitadas,
+      produtores_criados: produtoresCriados, arquivo_erros: arquivoErros, status,
+    }).eq("id", logId);
   }
 
   return {
-    arquivo: nome,
-    total: linhas.length,
-    importadas,
-    rejeitadas,
-    produtores_criados: produtoresCriados,
+    arquivo: nome, total: linhas.length, importadas, rejeitadas,
+    produtores_criados: produtoresCriados, produtores_atualizados: produtoresAtualizados,
     linhas: relatorioLinhas,
   };
 }
 
-/**
- * Processa UMA linha do CSV: valida, faz de-para, insere o contrato.
- */
 async function processarLinha(
   supabase: ReturnType<typeof createClient>,
   linha: LinhaCSV,
   produtosMap: Map<string, string>,
-  produtoresMap: Map<string, string>,
-): Promise<{ relatorio: RelatorioLinha; produtorCriado: boolean }> {
-  // 1. TIPO (COMPRA/VENDA → compra/venda)
+  produtoresPorDoc: Map<string, { id: string; nome: string }>,
+): Promise<{ relatorio: RelatorioLinha; produtor_acao?: "criado" | "atualizado" | "ja_existia" }> {
+  // 1. TIPO
   const tipo = linha.tipo.toLowerCase().trim();
   if (tipo !== "compra" && tipo !== "venda") {
-    return {
-      relatorio: {
-        linha: linha.linha,
-        contrato: linha.contrato,
-        status: "rejeitada",
-        motivo: `TIPO inválido: "${linha.tipo}" (esperado COMPRA ou VENDA)`,
-      },
-      produtorCriado: false,
-    };
+    return rej(linha, `TIPO inválido: "${linha.tipo}" (esperado COMPRA ou VENDA)`);
   }
 
-  // 2. Produto (de-para por nome)
-  const produtoNome = extrairNome(linha.produto).nome;
-  if (!produtoNome) {
-    return {
-      relatorio: { linha: linha.linha, contrato: linha.contrato, status: "rejeitada", motivo: "PRODUTO vazio" },
-      produtorCriado: false,
-    };
-  }
+  // 2. PRODUTO (de-para por nome, rejeita se não existe)
+  const produtoNome = extrairCodigoNome(linha.produto).nome;
+  if (!produtoNome) return rej(linha, "PRODUTO vazio");
   const produtoId = produtosMap.get(normalizarNome(produtoNome));
-  if (!produtoId) {
-    return {
-      relatorio: {
-        linha: linha.linha,
-        contrato: linha.contrato,
-        status: "rejeitada",
-        motivo: `PRODUTO "${produtoNome}" não cadastrado no sistema (cadastre antes de re-importar)`,
-      },
-      produtorCriado: false,
-    };
-  }
+  if (!produtoId) return rej(linha, `PRODUTO "${produtoNome}" não cadastrado (cadastre antes de re-importar)`);
 
-  // 3. Produtor (de-para por nome; se não existe, CRIA com cidade/UF do ORIGEM)
-  const produtorNome = extrairNome(linha.produtor).nome;
-  if (!produtorNome) {
-    return {
-      relatorio: { linha: linha.linha, contrato: linha.contrato, status: "rejeitada", motivo: "PRODUTOR vazio" },
-      produtorCriado: false,
-    };
-  }
-  let produtorId = produtoresMap.get(normalizarNome(produtorNome));
-  let produtorCriado = false;
-  if (!produtorId) {
-    const origem = parseOrigem(linha.origem);
-    const codigo = extrairNome(linha.produtor).codigo;
+  // 3. PRODUTOR (de-para por CPF/CNPJ; cria/atualiza)
+  const produtorNome = extrairCodigoNome(linha.p_produtor).nome;
+  if (!produtorNome) return rej(linha, "P_PRODUTOR vazio");
+  const docCpf = normalizarDoc(linha.p_doccpf);
+  if (!docCpf) return rej(linha, "P_DOCCPF vazio (CPF/CNPJ obrigatório pra de-para)");
+
+  const cidade_uf = parseCidadeUF(linha.p_cidade_produtor);
+  const tipoProdutor = tipo === "compra" ? "vendedor" : "comprador";
+
+  let produtorAcao: "criado" | "atualizado" | "ja_existia" = "ja_existia";
+  let produtorId: string;
+
+  const existente = produtoresPorDoc.get(docCpf);
+  if (existente) {
+    produtorId = existente.id;
+    // Atualiza dados faltantes (sem sobrescrever campos já preenchidos pelo user)
+    // Por simplicidade: sempre garante o tipo correto e razao_social se vier
+    const { error: errUp } = await supabase
+      .from("produtores")
+      .update({
+        razao_social: linha.p_nomefazenda || existente.nome,
+        tipo: tipoProdutor,
+        ativo: true,
+      })
+      .eq("id", produtorId);
+    if (!errUp) produtorAcao = "atualizado";
+  } else {
+    // Cria novo
     const { data: novo, error: errProd } = await supabase
       .from("produtores")
       .insert({
         nome: produtorNome,
-        razao_social: origem.razao ?? produtorNome,
-        cpf_cnpj: codigo ? `ERP-${codigo}` : "PENDENTE",
-        cidade: origem.cidade ?? "—",
-        uf: origem.uf ?? "—",
+        razao_social: linha.p_nomefazenda || produtorNome,
+        cpf_cnpj: linha.p_doccpf,
+        cidade: cidade_uf.cidade ?? "—",
+        uf: cidade_uf.uf ?? "—",
         contato: "—",
-        tipo: "vendedor",
+        tipo: tipoProdutor,
         ativo: true,
       })
       .select("id")
       .single();
     if (errProd || !novo) {
-      return {
-        relatorio: {
-          linha: linha.linha,
-          contrato: linha.contrato,
-          status: "rejeitada",
-          motivo: `Falha ao criar produtor "${produtorNome}": ${errProd?.message ?? "sem id"}`,
-        },
-        produtorCriado: false,
-      };
+      return rej(linha, `Falha ao criar produtor "${produtorNome}": ${errProd?.message ?? "sem id"}`);
     }
     produtorId = novo.id as string;
-    produtoresMap.set(normalizarNome(produtorNome), produtorId);
-    produtorCriado = true;
+    produtoresPorDoc.set(docCpf, { id: produtorId, nome: produtorNome });
+    produtorAcao = "criado";
   }
 
-  // 4. Conversões numéricas e datas
+  // 4. Conversões
   const qtdKg = parseNumberPtBR(linha.quantidade);
-  if (qtdKg === null || qtdKg <= 0) {
-    return {
-      relatorio: {
-        linha: linha.linha,
-        contrato: linha.contrato,
-        status: "rejeitada",
-        motivo: `QUANTIDADE inválida: "${linha.quantidade}"`,
-      },
-      produtorCriado,
-    };
-  }
+  if (qtdKg === null || qtdKg <= 0) return rej(linha, `QUANTIDADE inválida: "${linha.quantidade}"`, produtorAcao);
 
   const saldoKg = parseNumberPtBR(linha.nqtdsaldo) ?? qtdKg;
   const valorTotal = parseNumberPtBR(linha.valortotal);
   const valorSaldo = parseNumberPtBR(linha.nvlrsaldo);
   const valorSaca = parseNumberPtBR(linha.valorunit);
-  // Calcula valor_unitario (R$/kg) a partir de valor_unitario_saca
   const valorUnitario = valorSaca !== null ? +(valorSaca / 60).toFixed(6) : undefined;
 
-  // 5. Insert do contrato
-  // Como não temos local_origem cadastrado (CSV traz texto livre),
-  // gravamos origem_descricao e local_origem_id = null por enquanto.
-  // O usuário pode linkar depois manualmente.
-  const numero = `ERP-${linha.estab}-${linha.contrato}`; // identificador único do ERP
+  // 5. Upsert contrato
+  const numero = `ERP-${linha.estab}-${linha.contrato}`;
   const insertPayload = {
     numero,
     numero_origem: linha.contrato,
@@ -331,30 +276,25 @@ async function processarLinha(
     disponivel: false,
   };
 
-  // Upsert por numero_origem + empresa_origem_codigo (idempotente)
   const { error: errIns } = await supabase
     .from("contratos")
     .upsert(insertPayload, { onConflict: "numero" });
 
-  if (errIns) {
-    return {
-      relatorio: {
-        linha: linha.linha,
-        contrato: linha.contrato,
-        status: "rejeitada",
-        motivo: `Insert falhou: ${errIns.message}`,
-      },
-      produtorCriado,
-    };
-  }
+  if (errIns) return rej(linha, `Insert contrato: ${errIns.message}`, produtorAcao);
 
   return {
-    relatorio: { linha: linha.linha, contrato: linha.contrato, status: "importada" },
-    produtorCriado,
+    relatorio: { linha: linha.linha, contrato: linha.contrato, status: "importada", produtor_acao: produtorAcao },
+    produtor_acao: produtorAcao,
   };
 }
 
-/** Gera CSV de erros (só linhas rejeitadas). Retorna null se não há erros. */
+function rej(linha: LinhaCSV, motivo: string, produtor_acao?: "criado" | "atualizado" | "ja_existia") {
+  return {
+    relatorio: { linha: linha.linha, contrato: linha.contrato, status: "rejeitada" as const, produtor_acao, motivo },
+    produtor_acao,
+  };
+}
+
 function gerarCSVErros(linhas: RelatorioLinha[]): string | null {
   const erros = linhas.filter((l) => l.status === "rejeitada");
   if (erros.length === 0) return null;
@@ -363,7 +303,6 @@ function gerarCSVErros(linhas: RelatorioLinha[]): string | null {
     const motivo = (e.motivo ?? "").replace(/[;\n]/g, " ");
     rows.push(`${e.linha};${e.contrato};${motivo}`);
   }
-  // BOM UTF-8 + CSV
   return "﻿" + rows.join("\n");
 }
 

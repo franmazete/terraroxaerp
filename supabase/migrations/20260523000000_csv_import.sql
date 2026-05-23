@@ -21,7 +21,7 @@ begin
   end if;
 end $$;
 
--- ─── 2. Colunas novas ───────────────────────────────────────────────
+-- ─── 2. Colunas novas + relaxar local_origem_id ─────────────────────
 alter table public.contratos
   add column if not exists safra text,
   add column if not exists data_inicio date,
@@ -31,6 +31,9 @@ alter table public.contratos
   add column if not exists origem_descricao text,
   add column if not exists valor_unitario_saca numeric,
   add column if not exists valor_saldo numeric;
+
+-- Importação CSV não traz local_origem_id como UUID — vincula depois manualmente.
+alter table public.contratos alter column local_origem_id drop not null;
 
 comment on column public.contratos.safra is 'Safra do contrato (ex: "26-2026") — vem do CSV DESCSAFRA';
 comment on column public.contratos.empresa_origem_codigo is 'Código do estabelecimento no ERP de origem — INFORMATIVO, não relaciona com nada';
