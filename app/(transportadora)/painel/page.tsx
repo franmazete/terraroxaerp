@@ -24,7 +24,9 @@ import type { Carga, Reserva } from "@/lib/types";
 export default function PainelTranspPage() {
   const { user } = useAuth();
   const store = useDataStore();
-  const { cargas, ordens, pendencias } = store;
+  const cargas = store.cargas ?? [];
+  const ordens = store.ordens ?? [];
+  const pendencias = store.pendencias ?? [];
   const [reservar, setReservar] = useState<Carga | null>(null);
   const [anexar, setAnexar] = useState<{ carga: Carga; reserva: Reserva } | null>(null);
   const [ocAberta, setOcAberta] = useState<string | null>(null);
@@ -32,7 +34,9 @@ export default function PainelTranspPage() {
   const tid = user?.transp_id;
 
   const stats = useMemo(() => {
-    const minhas = cargas.flatMap((c) => c.reservas.filter((r) => r.transp_id === tid).map((r) => ({ ...r, carga: c })));
+    const minhas = cargas.flatMap((c) =>
+      (c.reservas ?? []).filter((r) => r.transp_id === tid).map((r) => ({ ...r, carga: c })),
+    );
     const aprovadas = minhas.filter((r) => r.status === "aprovada");
     const pendentes = minhas.filter((r) => r.status === "pendente");
     const disponiveis = cargas.filter((c) => c.status !== "fechada" && disponivelKg(c) > 0);

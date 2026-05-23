@@ -16,12 +16,15 @@ import type { Carga, Reserva, ReservaComCarga } from "@/lib/types";
 
 export default function MinhasReservasPage() {
   const { user } = useAuth();
-  const { cargas, autorizacoesCarregamento, ordens } = useDataStore();
+  const store = useDataStore();
+  const cargas = store.cargas ?? [];
+  const autorizacoesCarregamento = store.autorizacoesCarregamento ?? [];
+  const ordens = store.ordens ?? [];
   const tid = user?.transp_id;
   const [anexar, setAnexar] = useState<{ carga: Carga; reserva: Reserva } | null>(null);
 
   const minhas: ReservaComCarga[] = cargas.flatMap((c) =>
-    c.reservas.filter((r) => r.transp_id === tid).map((r): ReservaComCarga => ({ ...r, carga: c })),
+    (c.reservas ?? []).filter((r) => r.transp_id === tid).map((r): ReservaComCarga => ({ ...r, carga: c })),
   );
 
   if (minhas.length === 0) {
