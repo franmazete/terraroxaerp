@@ -16,6 +16,7 @@ export interface LinhaCSV {
   linha: number;
   estab: string;
   tipo: string;
+  operacao: string;
   contrato: string;
   descsafra: string;
   dtemissao: string;
@@ -51,6 +52,7 @@ export function parseCSV(content: string): LinhaCSV[] {
   const ix = {
     estab: idx("ESTAB"),
     tipo: idx("TIPO"),
+    operacao: idx("OPERACAO"),
     contrato: idx("CONTRATO"),
     descsafra: idx("DESCSAFRA"),
     dtemissao: idx("DTEMISSAO"),
@@ -82,6 +84,7 @@ export function parseCSV(content: string): LinhaCSV[] {
       linha: i + 1,
       estab: get(campos, ix.estab),
       tipo: get(campos, ix.tipo),
+      operacao: get(campos, ix.operacao),
       contrato: get(campos, ix.contrato),
       descsafra: get(campos, ix.descsafra),
       dtemissao: get(campos, ix.dtemissao),

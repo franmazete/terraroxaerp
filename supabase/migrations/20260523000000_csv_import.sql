@@ -30,7 +30,10 @@ alter table public.contratos
   add column if not exists numero_origem text,
   add column if not exists origem_descricao text,
   add column if not exists valor_unitario_saca numeric,
-  add column if not exists valor_saldo numeric;
+  add column if not exists valor_saldo numeric,
+  add column if not exists operacao text;
+
+create index if not exists ix_contratos_operacao on public.contratos(operacao) where operacao is not null;
 
 -- Importação CSV não traz local_origem_id como UUID — vincula depois manualmente.
 alter table public.contratos alter column local_origem_id drop not null;

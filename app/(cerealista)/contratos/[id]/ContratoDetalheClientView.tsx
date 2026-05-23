@@ -239,6 +239,9 @@ export function ContratoDetalheClientView({
               {terminal && (
                 <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Terminal</td><td>{terminal.nome} <Badge tone="blue">{terminal.tipo}</Badge></td></tr>
               )}
+              {contrato.operacao && (
+                <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Operação</td><td><Badge tone="blue">{contrato.operacao}</Badge></td></tr>
+              )}
               {contrato.safra && (
                 <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Safra</td><td><Badge tone="teal">{contrato.safra}</Badge></td></tr>
               )}

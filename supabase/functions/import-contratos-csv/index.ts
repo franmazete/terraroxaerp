@@ -266,6 +266,7 @@ async function processarLinha(
     safra: linha.descsafra || null,
     empresa_origem_codigo: linha.estab || null,
     origem_descricao: linha.origem || null,
+    operacao: linha.operacao || null,
     data_emissao: parseDataPtBR(linha.dtemissao),
     data_vencto_financeiro: parseDataPtBR(linha.dtvencto),
     data_inicio: parseDataPtBR(linha.dtinicio),

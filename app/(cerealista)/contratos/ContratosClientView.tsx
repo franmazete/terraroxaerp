@@ -65,17 +65,32 @@ export function ContratosClientView({
 
   const [search, setSearch] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<string>("");
+  const [filtroOperacao, setFiltroOperacao] = useState<string>("");
   const [modalOpen, setModalOpen] = useState(false);
+
+  // Operações distintas (pra preencher o select + cards)
+  const operacoesUnicas = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of contratos) if (c.operacao) set.add(c.operacao);
+    return Array.from(set).sort();
+  }, [contratos]);
 
   const lista = useMemo(() => {
     const q = search.toLowerCase();
     return contratos.filter((c) => {
       if (filtroStatus && c.status !== filtroStatus) return false;
+      if (filtroOperacao && c.operacao !== filtroOperacao) return false;
       const prod = produtores.find((p) => p.id === c.produtor_id)?.nome.toLowerCase() ?? "";
       const cli = clientes.find((cl) => cl.id === c.cliente_id)?.nome.toLowerCase() ?? "";
-      return c.numero.toLowerCase().includes(q) || prod.includes(q) || cli.includes(q);
+      const op = (c.operacao ?? "").toLowerCase();
+      return (
+        c.numero.toLowerCase().includes(q) ||
+        prod.includes(q) ||
+        cli.includes(q) ||
+        op.includes(q)
+      );
     });
-  }, [contratos, search, filtroStatus, produtores, clientes]);
+  }, [contratos, search, filtroStatus, filtroOperacao, produtores, clientes]);
 
   const stats = useMemo(() => {
     const ativos = contratos.filter((c) => c.status === "ativo");
@@ -90,6 +105,20 @@ export function ContratosClientView({
       total: contratos.length,
     };
   }, [contratos]);
+
+  // Totalizadores por operação (com base na lista filtrada por status/search, ignorando filtroOperacao
+  // pra mostrar a contagem total disponível em cada operação).
+  const statsPorOperacao = useMemo(() => {
+    const base = contratos.filter((c) => !filtroStatus || c.status === filtroStatus);
+    return operacoesUnicas.map((op) => {
+      const items = base.filter((c) => c.operacao === op);
+      return {
+        operacao: op,
+        count: items.length,
+        kg: items.reduce((s, c) => s + c.qtd_kg_total, 0),
+      };
+    });
+  }, [contratos, operacoesUnicas, filtroStatus]);
 
   return (
     <>
@@ -110,7 +139,17 @@ export function ContratosClientView({
               <option value="">Todos status</option>
               {STATUS_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
             </select>
-            <SearchInput value={search} onChange={setSearch} placeholder="Número, produtor ou cliente..." />
+            {operacoesUnicas.length > 0 && (
+              <select
+                value={filtroOperacao}
+                onChange={(e) => setFiltroOperacao(e.target.value)}
+                style={{ padding: "8px 10px", border: "1.5px solid var(--border2)", borderRadius: "var(--radius)", fontSize: 12, fontFamily: "inherit", maxWidth: 220 }}
+              >
+                <option value="">Todas operações</option>
+                {operacoesUnicas.map((op) => <option key={op} value={op}>{op}</option>)}
+              </select>
+            )}
+            <SearchInput value={search} onChange={setSearch} placeholder="Número, produtor, cliente ou operação..." />
             <Button
               size="sm"
               onClick={() =>
@@ -119,6 +158,8 @@ export function ContratosClientView({
                   [
                     { header: "Número", value: (c) => c.numero_manual || c.numero },
                     { header: "Tipo", value: (c) => c.tipo_contrato ?? "" },
+                    { header: "Operação", value: (c) => c.operacao ?? "" },
+                    { header: "Safra", value: (c) => c.safra ?? "" },
                     { header: "Produtor", value: (c) => produtores.find((p) => p.id === c.produtor_id)?.nome ?? "" },
                     { header: "Cliente", value: (c) => clientes.find((x) => x.id === c.cliente_id)?.nome ?? "" },
                     { header: "Produto", value: (c) => produtos.find((p) => p.id === c.produto_id)?.nome ?? "" },
@@ -147,6 +188,40 @@ export function ContratosClientView({
         <StatBox tone="t" label="Saldo Disponível" value={fmtKg(stats.saldoTotal)} sub="ainda não gerado em cargas" />
         <StatBox tone="a" label="Já Despachado" value={fmtKg(stats.totalKg - stats.saldoTotal)} sub="virou carga" />
       </div>
+
+      {statsPorOperacao.length > 0 && (
+        <div className="section-gap" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+          {statsPorOperacao.map((s) => {
+            const ativo = filtroOperacao === s.operacao;
+            return (
+              <button
+                key={s.operacao}
+                onClick={() => setFiltroOperacao(ativo ? "" : s.operacao)}
+                style={{
+                  textAlign: "left",
+                  padding: "12px 14px",
+                  border: `1.5px solid ${ativo ? "var(--g600)" : "var(--border)"}`,
+                  background: ativo ? "var(--g100)" : "var(--surf2)",
+                  borderRadius: "var(--radius)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  transition: "all .15s",
+                }}
+                title={ativo ? "Clique para limpar filtro" : "Clique para filtrar por esta operação"}
+              >
+                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>
+                  📋 Operação {ativo && "· Filtro ativo"}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--g700)", marginBottom: 4 }}>{s.operacao}</div>
+                <div style={{ display: "flex", gap: 12, fontSize: 12 }}>
+                  <span><strong>{s.count}</strong> contratos</span>
+                  <span style={{ color: "var(--muted)" }}>{fmtKg(s.kg)}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <Card>
         {lista.length === 0 ? (

@@ -290,6 +290,8 @@ export interface Contrato {
   numero_origem?: string;
   /** Texto livre da origem (cidade/UF/razão social) — não relaciona com locais. */
   origem_descricao?: string;
+  /** Tipo de operação do contrato (texto livre vindo do ERP, ex: "RETIRADA ARMAZEM DE TERCEIRO"). */
+  operacao?: string;
   /** Valor por kg em R$ (opcional). */
   valor_unitario?: number;
   /** R$/saca de 60kg (convenção do mercado de grãos). */

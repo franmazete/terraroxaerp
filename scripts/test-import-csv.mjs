@@ -62,7 +62,7 @@ function parseCSV(content) {
   const cabecalho = linhas[0].split(";").map((c) => c.trim().toUpperCase());
   const idx = (n) => cabecalho.indexOf(n);
   const ix = {
-    estab: idx("ESTAB"), tipo: idx("TIPO"), contrato: idx("CONTRATO"),
+    estab: idx("ESTAB"), tipo: idx("TIPO"), operacao: idx("OPERACAO"), contrato: idx("CONTRATO"),
     descsafra: idx("DESCSAFRA"), dtemissao: idx("DTEMISSAO"), dtvencto: idx("DTVENCTO"),
     dtinicio: idx("DTINICIO"), dtfinal: idx("DTFINAL"),
     p_produtor: idx("P_PRODUTOR"), p_doccpf: idx("P_DOCCPF"),
@@ -78,7 +78,7 @@ function parseCSV(content) {
     if (c.length < 10) continue;
     resultado.push({
       linha: i + 1,
-      estab: get(c, ix.estab), tipo: get(c, ix.tipo), contrato: get(c, ix.contrato),
+      estab: get(c, ix.estab), tipo: get(c, ix.tipo), operacao: get(c, ix.operacao), contrato: get(c, ix.contrato),
       descsafra: get(c, ix.descsafra), dtemissao: get(c, ix.dtemissao), dtvencto: get(c, ix.dtvencto),
       dtinicio: get(c, ix.dtinicio), dtfinal: get(c, ix.dtfinal),
       p_produtor: get(c, ix.p_produtor), p_doccpf: get(c, ix.p_doccpf),
@@ -272,6 +272,7 @@ for (const linha of linhas) {
       safra: linha.descsafra || null,
       empresa_origem_codigo: linha.estab || null,
       origem_descricao: linha.origem || null,
+      operacao: linha.operacao || null,
       data_emissao: parseDataPtBR(linha.dtemissao),
       data_vencto_financeiro: parseDataPtBR(linha.dtvencto),
       data_inicio: parseDataPtBR(linha.dtinicio),
