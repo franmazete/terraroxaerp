@@ -33,6 +33,8 @@ export function ConvidarUsuarioModal({ open, onClose }: Props) {
   const [nome, setNome] = useState("");
   const [perfil, setPerfil] = useState<Perfil>("logistica");
   const [transpId, setTranspId] = useState("");
+  const [usarSenhaManual, setUsarSenhaManual] = useState(false);
+  const [senhaTemp, setSenhaTemp] = useState("");
 
   async function enviar(): Promise<void> {
     if (!email.trim() || !email.includes("@")) {
@@ -45,6 +47,10 @@ export function ConvidarUsuarioModal({ open, onClose }: Props) {
     }
     if (perfil === "transportadora" && !transpId) {
       toast.warn("Selecione uma transportadora para vincular.");
+      return;
+    }
+    if (usarSenhaManual && senhaTemp.length < 6) {
+      toast.warn("A senha temporária precisa ter ao menos 6 caracteres.");
       return;
     }
     if (!supabaseConfigured) {
@@ -63,18 +69,31 @@ export function ConvidarUsuarioModal({ open, onClose }: Props) {
           nome,
           perfil,
           transp_id: transpId || undefined,
+          senha: usarSenhaManual ? senhaTemp : undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? "Falha ao enviar convite.");
+        toast.error(data.error ?? "Falha ao criar usuário.");
         return;
       }
-      toast.success(`Link enviado para ${email}. O usuário receberá um e-mail para definir senha.`, "Convite enviado");
+      if (usarSenhaManual) {
+        toast.success(
+          `Usuário criado. Login: ${email} | Senha: ${senhaTemp}. Será forçado a trocar no 1º acesso.`,
+          "Usuário pronto pra testar",
+        );
+      } else {
+        toast.success(
+          `Link enviado para ${email}. O usuário receberá um e-mail para definir senha.`,
+          "Convite enviado",
+        );
+      }
       setEmail("");
       setNome("");
       setPerfil("logistica");
       setTranspId("");
+      setSenhaTemp("");
+      setUsarSenhaManual(false);
       onClose();
     } catch (e) {
       toast.error("Erro ao chamar o servidor. Veja o console.");
@@ -86,13 +105,17 @@ export function ConvidarUsuarioModal({ open, onClose }: Props) {
     <Modal
       open={open}
       onClose={onClose}
-      title="📧 Convidar usuário por e-mail"
-      subtitle="O convidado receberá um link para definir senha"
+      title={usarSenhaManual ? "🔑 Criar usuário com senha temporária" : "📧 Convidar usuário por e-mail"}
+      subtitle={usarSenhaManual ? "O usuário será forçado a trocar no 1º acesso" : "O convidado receberá um link para definir senha"}
       footer={
         <>
           <Button onClick={onClose}>Cancelar</Button>
-          <LoadingButton variant="primary" onClick={enviar} loadingLabel="Enviando convite...">
-            📧 Enviar convite
+          <LoadingButton
+            variant="primary"
+            onClick={enviar}
+            loadingLabel={usarSenhaManual ? "Criando usuário..." : "Enviando convite..."}
+          >
+            {usarSenhaManual ? "🔑 Criar usuário" : "📧 Enviar convite"}
           </LoadingButton>
         </>
       }
@@ -104,11 +127,38 @@ export function ConvidarUsuarioModal({ open, onClose }: Props) {
             Veja o guia em <code>docs/SETUP_ETAPA_2_SUPABASE.md</code> ou use <strong>"Novo Usuário"</strong> no modo mock atual.
           </div>
         </AlertBox>
+      ) : usarSenhaManual ? (
+        <AlertBox tone="amber" icon="🔑" title="Modo: senha temporária (ideal pra testes)">
+          Você define uma senha agora. O usuário consegue logar imediatamente, mas é forçado a trocar a senha no primeiro acesso.
+        </AlertBox>
       ) : (
-        <AlertBox tone="blue" icon="ℹ️" title="Como funciona">
+        <AlertBox tone="blue" icon="ℹ️" title="Modo: convite por e-mail">
           O Supabase envia um e-mail com link único. Ao clicar, o usuário define a senha e ganha acesso conforme o perfil.
         </AlertBox>
       )}
+
+      {/* Toggle de modo */}
+      <div style={{
+        background: "var(--surf2)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius)",
+        padding: "10px 12px",
+        marginBottom: 12,
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+      }}>
+        <input
+          type="checkbox"
+          id="usarSenhaManual"
+          checked={usarSenhaManual}
+          onChange={(e) => setUsarSenhaManual(e.target.checked)}
+          style={{ width: 16, height: 16 }}
+        />
+        <label htmlFor="usarSenhaManual" style={{ flex: 1, fontSize: 13, cursor: "pointer" }}>
+          <strong>Definir senha temporária agora</strong> (recomendado pra testar menu antes de enviar)
+        </label>
+      </div>
 
       <FormRow>
         <Field label="Nome completo *">
@@ -140,6 +190,20 @@ export function ConvidarUsuarioModal({ open, onClose }: Props) {
           </Field>
         )}
       </FormRow>
+
+      {usarSenhaManual && (
+        <FormRow variant="single">
+          <Field label="Senha temporária *" hint="Mínimo 6 caracteres. Será trocada no primeiro login.">
+            <Input
+              type="text"
+              value={senhaTemp}
+              onChange={(e) => setSenhaTemp(e.target.value)}
+              placeholder="Ex: terraroxa2026"
+              autoComplete="new-password"
+            />
+          </Field>
+        </FormRow>
+      )}
     </Modal>
   );
 }

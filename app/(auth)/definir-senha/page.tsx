@@ -31,7 +31,11 @@ export default function DefinirSenhaPage() {
     if (senha !== confirmar) return setErro("As senhas não coincidem.");
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.auth.updateUser({ password: senha });
+    const { error } = await supabase.auth.updateUser({
+      password: senha,
+      // Limpa a flag de must_change_password (caso o admin tenha criado com senha temp)
+      data: { must_change_password: false },
+    });
     setLoading(false);
     if (error) {
       setErro(error.message);

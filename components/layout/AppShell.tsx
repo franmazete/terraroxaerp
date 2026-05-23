@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import type { Role } from "@/lib/types";
 import { NavDropdown } from "./NavDropdown";
 import { NotificacoesBell } from "./NotificacoesBell";
+import { Logo } from "@/components/ui/Logo";
 import { NAV_CEREALISTA, NAV_TRANSPORTADORA, type NavItem, type NavSection } from "./nav-config";
 import s from "./Topbar.module.css";
 
@@ -50,9 +51,11 @@ export function AppShell({ role, children }: Props) {
   return (
     <div className={s.shell}>
       <div className={s.topbar}>
-        <div className={s.brand}>
-          <div className={s.dot} />
-          Portal de Cargas
+        <div className={s.brand} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Logo empresa="terra-roxa" height={36} />
+          <span style={{ fontSize: 11, color: "var(--muted)", borderLeft: "1px solid var(--border)", paddingLeft: 10 }}>
+            Portal de Cargas
+          </span>
         </div>
         <span className={`${s.roleBadge} ${role === "cerealista" ? s.roleCerealista : s.roleTransp}`}>
           {badgeLabel}

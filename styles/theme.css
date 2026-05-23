@@ -1,16 +1,16 @@
-/* Paleta extraída do HTML original — mantém o visual que você curtiu. */
+/* Paleta principal: roxo Terra Roxa (#8745A3). */
 :root {
-  /* Verde (cor primária, agro) */
-  --g900: #0f2004;
-  --g800: #1a3a07;
-  --g700: #26560d;
-  --g600: #357512;
-  --g500: #479919;
-  --g400: #63ba28;
-  --g300: #8dd457;
-  --g200: #bce896;
-  --g100: #e3f5cc;
-  --g50:  #f4fce8;
+  /* Roxo (cor primária — identidade Terra Roxa) */
+  --g900: #20102a;
+  --g800: #341948;
+  --g700: #5b2d75;
+  --g600: #8745a3;
+  --g500: #9d65b3;
+  --g400: #b687c5;
+  --g300: #cfa9d6;
+  --g200: #e3cde7;
+  --g100: #f3e7f6;
+  --g50:  #fbf6fc;
 
   /* Âmbar (warnings, pendências) */
   --a600: #8a5200;
@@ -24,32 +24,33 @@
   --b200: #7fb8f7;
   --b100: #dceeff;
 
-  /* Vermelho (erro, reprovação) */
-  --r600: #7a1515;
-  --r400: #d63030;
-  --r200: #f5a0a0;
-  --r100: #fde8e8;
+  /* Vermelho (erro, reprovação) — usado também na marca Terra Roxa */
+  --r600: #6e1e2a;
+  --r400: #b73a48;
+  --r200: #e89aa3;
+  --r100: #fbe5e8;
 
-  /* Teal (sucesso, fechadas) */
+  /* Teal/Verde (sucesso, saldo positivo, fechadas) — preserva semântica verde
+     para indicadores positivos (saldo disponível, status concluído). */
   --t600: #0a4d3a;
   --t400: #0e7a5c;
   --t200: #6dcfb5;
   --t100: #d4f5ec;
 
-  /* Superfícies */
-  --slate: #f0f2f0;
+  /* Superfícies (tons claros de roxo bem suaves) */
+  --slate: #f1ecf2;
   --surface: #ffffff;
-  --surf2: #f7f9f6;
-  --surf3: #eff2ee;
+  --surf2: #f8f4fa;
+  --surf3: #f1ebf5;
 
   /* Bordas */
-  --border:  rgba(0, 0, 0, 0.08);
-  --border2: rgba(0, 0, 0, 0.15);
+  --border:  rgba(58, 22, 78, 0.08);
+  --border2: rgba(58, 22, 78, 0.15);
 
   /* Texto */
-  --text: #1a2015;
-  --muted: #5a6650;
-  --hint: #8fa080;
+  --text: #1a1320;
+  --muted: #5a4d65;
+  --hint: #9a8aa3;
 
   /* Raios e sombras */
   --radius: 10px;

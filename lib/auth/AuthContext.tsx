@@ -104,7 +104,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const u = await fetchUsuarioFromDb(data.user.id, data.user.email ?? "");
       if (!u) return false;
       setUser(u);
-      router.push(u.role === "cerealista" ? "/dashboard" : "/painel");
+      // Se o user foi criado com senha temporária e ainda não trocou,
+      // força ir pra tela de definir senha antes de qualquer outra coisa.
+      const mustChange = data.user.user_metadata?.must_change_password === true;
+      if (mustChange) {
+        router.push("/definir-senha?force=1");
+      } else {
+        router.push(u.role === "cerealista" ? "/dashboard" : "/painel");
+      }
       return true;
     } else {
       // ─── Login mock (legacy) ─────────────────────────────────────────
