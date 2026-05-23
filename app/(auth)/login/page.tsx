@@ -34,10 +34,16 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const ok = await login({ email, senha, transpId: mode === "transportadora" ? transpId : undefined });
+      // Em modo Supabase, o perfil/transp_id vem do banco (não do select).
+      // Em modo mock, o select de transp ainda é usado pra escolher qual login emular.
+      const ok = await login({
+        email,
+        senha,
+        transpId: !supabaseConfigured && mode === "transportadora" ? transpId : undefined,
+      });
       if (!ok) {
         setErro(supabaseConfigured
-          ? "E-mail ou senha incorretos. Se você foi convidado(a), defina a senha pelo link no e-mail."
+          ? "E-mail ou senha incorretos."
           : "Credenciais inválidas. Use os exemplos abaixo.");
       }
     } finally {
@@ -51,32 +57,36 @@ export default function LoginPage() {
         <div className={s.logo}>
           <div className={s.emoji}>🌾</div>
           <h1>Portal de Cargas</h1>
-          <span>Marketplace Logístico — Cerealista</span>
+          <span>Terra Roxa Comércio de Cereais</span>
         </div>
 
-        <div className={s.tabs}>
-          <button
-            type="button"
-            className={`${s.tab} ${mode === "cerealista" ? s.active : ""}`}
-            onClick={() => setMode("cerealista")}
-          >
-            🏢 Cerealista / Logística
-          </button>
-          <button
-            type="button"
-            className={`${s.tab} ${mode === "transportadora" ? s.active : ""}`}
-            onClick={() => setMode("transportadora")}
-          >
-            🚚 Transportadora
-          </button>
-        </div>
+        {/* Tabs de perfil só fazem sentido no modo mock (legacy).
+            Em Supabase, o perfil vem do banco após o login. */}
+        {!supabaseConfigured && (
+          <div className={s.tabs}>
+            <button
+              type="button"
+              className={`${s.tab} ${mode === "cerealista" ? s.active : ""}`}
+              onClick={() => setMode("cerealista")}
+            >
+              🏢 Cerealista / Logística
+            </button>
+            <button
+              type="button"
+              className={`${s.tab} ${mode === "transportadora" ? s.active : ""}`}
+              onClick={() => setMode("transportadora")}
+            >
+              🚚 Transportadora
+            </button>
+          </div>
+        )}
 
         {erro && <div className={s.error}>{erro}</div>}
 
         <div className={s.field}>
-          <label>Usuário / E-mail</label>
+          <label>E-mail</label>
           <input
-            type="text"
+            type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="seu@email.com.br"
@@ -95,9 +105,10 @@ export default function LoginPage() {
           />
         </div>
 
-        {mode === "transportadora" && (
+        {/* Select de transp só no modo mock — em Supabase vem do banco */}
+        {!supabaseConfigured && mode === "transportadora" && (
           <div className={s.field}>
-            <label>Transportadora</label>
+            <label>Transportadora (modo demo)</label>
             <select value={transpId} onChange={(e) => setTranspId(e.target.value)}>
               {transportadorasMock.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -109,7 +120,7 @@ export default function LoginPage() {
         )}
 
         <button type="submit" className={s.submit} disabled={loading}>
-          {loading ? "Entrando..." : "Entrar no Portal"}
+          {loading ? "Entrando..." : "Entrar"}
         </button>
 
         <div style={{ textAlign: "center", marginTop: 10 }}>
@@ -121,7 +132,10 @@ export default function LoginPage() {
         {supabaseConfigured ? (
           <div className={s.hint}>
             <p style={{ fontSize: 11, color: "var(--muted)" }}>
-              Acesso por convite. Sem conta? Peça ao administrador para convidá-lo.
+              Seu perfil e empresa vinculada são identificados automaticamente após o login.
+            </p>
+            <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+              Sem conta? Peça ao administrador para criar seu acesso.
             </p>
           </div>
         ) : (

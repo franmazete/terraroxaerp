@@ -82,7 +82,9 @@ export function PublicarCargaModal({
     setOrigemLocalId(c.local_origem_id);
     setDestinoLocalId(c.destino_local_id ?? "");
     setDataCarg(c.data_emissao ?? "");
-    setTotalKg(c.saldo_kg);
+    // ⚠️ NÃO auto-preenche com o saldo todo — usuário define a quantidade desta carga
+    // (sugestão padrão: 1 carreta bitrem = 45t). Deixa vazio pra forçar consciência.
+    setTotalKg("");
   }, [contratoId, contratos, produtos]);
 
   // Inicializa com contrato sugerido (ou primeiro ativo)
