@@ -260,12 +260,15 @@ export async function criarTransportadora(input: {
 
   const supabase = await createClient();
   const payload = {
-    ...input,
+    razao_social: input.razao_social,
+    nome_fantasia: input.nome_fantasia || input.razao_social,
+    cnpj_cpf: input.cnpj_cpf,
+    telefone: input.telefone,
+    email: input.email,
+    responsavel: input.responsavel,
+    inscricao_estadual: input.inscricao_estadual,
+    rntrc: input.rntrc,
     status: input.status ?? "pendente",
-    // Campos legacy mantidos por compat com types.ts
-    nome: input.nome_fantasia || input.razao_social,
-    contato: input.telefone,
-    cnpj: input.cnpj_cpf,
   };
   const { data, error } = await supabase
     .from("transportadoras")
@@ -281,7 +284,10 @@ export async function atualizarTransportadora(id: string, patch: Partial<Transpo
   const auth = await requireCerealista();
   if ("error" in auth) return { error: auth.error };
   const supabase = await createClient();
-  const { error } = await supabase.from("transportadoras").update(patch).eq("id", id);
+  // Remove campos legacy do tipo TS que NÃO existem no schema do Supabase
+  const { nome: _nome, contato: _contato, cnpj: _cnpj, criada_em: _ce, ...patchLimpo } = patch as Record<string, unknown>;
+  void _nome; void _contato; void _cnpj; void _ce;
+  const { error } = await supabase.from("transportadoras").update(patchLimpo).eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/cadastros/transportadoras");
   return { ok: true };
