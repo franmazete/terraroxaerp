@@ -10,6 +10,7 @@ import {
   getProdutores,
   getProdutos,
   getTerminais,
+  getTransportadoras,
 } from "@/lib/api/queries.server";
 
 const SUPABASE_CONFIGURED =
@@ -25,7 +26,7 @@ export default async function ContratoDetalhePage({ params }: { params: Promise<
   }
 
   // Modo Supabase: busca tudo no servidor em paralelo
-  const [contrato, produtos, produtores, clientes, locais, terminais, cargas, ordens] = await Promise.all([
+  const [contrato, produtos, produtores, clientes, locais, terminais, cargas, ordens, transportadoras] = await Promise.all([
     getContrato(id),
     getProdutos(),
     getProdutores(),
@@ -34,6 +35,7 @@ export default async function ContratoDetalhePage({ params }: { params: Promise<
     getTerminais(),
     getCargas(),
     getOrdens(),
+    getTransportadoras(),
   ]);
 
   if (!contrato) notFound();
@@ -58,6 +60,11 @@ export default async function ContratoDetalhePage({ params }: { params: Promise<
       terminal={terminal}
       cargasDoContrato={cargasDoContrato}
       ordensDoContrato={ordensDoContrato}
+      produtosSSR={produtos}
+      clientesSSR={clientes}
+      locaisSSR={locais}
+      terminaisSSR={terminais}
+      transportadorasSSR={transportadoras}
     />
   );
 }

@@ -18,7 +18,7 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { useDataStore } from "@/lib/data-store";
 import { useToast } from "@/components/ui/Toast";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { disponibilizarContratoAction } from "@/lib/api/actions";
+import { disponibilizarContratoAction, excluirContratoAction } from "@/lib/api/actions";
 import { fmtKg, fmtDate, fmtBRL } from "@/lib/domain/format";
 import { percentualContratoUsado, saldoColor } from "@/lib/domain/saldo";
 import type {
@@ -31,6 +31,7 @@ import type {
   Produto,
   Produtor,
   Terminal,
+  Transportadora,
 } from "@/lib/types";
 
 type Tab = "resumo" | "cargas" | "reservas" | "ordens";
@@ -52,6 +53,12 @@ interface Props {
   terminal: Terminal | null;
   cargasDoContrato: Carga[];
   ordensDoContrato: OrdemCarregamento[];
+  /** Dados SSR pros modais editar/publicar — null quando estamos em modo mock. */
+  produtosSSR?: Produto[] | null;
+  clientesSSR?: Cliente[] | null;
+  locaisSSR?: Local[] | null;
+  terminaisSSR?: Terminal[] | null;
+  transportadorasSSR?: Transportadora[] | null;
 }
 
 export function ContratoDetalheClientView({
@@ -64,6 +71,11 @@ export function ContratoDetalheClientView({
   terminal,
   cargasDoContrato,
   ordensDoContrato,
+  produtosSSR = null,
+  clientesSSR = null,
+  locaisSSR = null,
+  terminaisSSR = null,
+  transportadorasSSR = null,
 }: Props) {
   const { user, supabaseConfigured } = useAuth();
   const toast = useToast();
@@ -81,6 +93,35 @@ export function ContratoDetalheClientView({
 
   const pct = percentualContratoUsado(contrato);
   const st = STATUS_OPTIONS.find((o) => o.v === contrato.status)!;
+
+  async function excluir() {
+    const ok = await confirmar({
+      titulo: "Excluir contrato?",
+      mensagem: (
+        <>
+          Tem certeza que quer excluir o contrato{" "}
+          <strong>{contrato.numero_manual || contrato.numero}</strong>?
+          <div style={{ marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
+            Esta ação é definitiva. Se houver cargas vinculadas, será bloqueada.
+          </div>
+        </>
+      ),
+      variante: "danger",
+      confirmarLabel: "Excluir",
+    });
+    if (!ok) return;
+    if (supabaseConfigured) {
+      const r = await excluirContratoAction(contrato.id);
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success("Contrato excluído.");
+      router.push("/contratos");
+    } else {
+      toast.warn("Exclusão em modo mock não persiste — reabra o app pra resetar.");
+    }
+  }
 
   async function disponibilizar() {
     const ok = await confirmar({
@@ -138,6 +179,7 @@ export function ContratoDetalheClientView({
             </Button>
           )}
           <Button onClick={() => setEditarOpen(true)}>✏️ Editar</Button>
+          <Button variant="danger" onClick={excluir}>🗑️ Excluir</Button>
         </div>
       </div>
 
@@ -197,11 +239,29 @@ export function ContratoDetalheClientView({
               {terminal && (
                 <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Terminal</td><td>{terminal.nome} <Badge tone="blue">{terminal.tipo}</Badge></td></tr>
               )}
+              {contrato.safra && (
+                <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Safra</td><td><Badge tone="teal">{contrato.safra}</Badge></td></tr>
+              )}
+              {contrato.empresa_origem_codigo && (
+                <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Empresa de origem (ERP)</td><td><span style={{ fontFamily: "DM Mono, monospace" }}>{contrato.empresa_origem_codigo}</span></td></tr>
+              )}
+              {contrato.numero_origem && (
+                <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Nº no ERP</td><td><span style={{ fontFamily: "DM Mono, monospace" }}>{contrato.numero_origem}</span></td></tr>
+              )}
               {contrato.data_emissao && (
                 <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Data de Emissão</td><td>{fmtDate(contrato.data_emissao)}</td></tr>
               )}
+              {contrato.data_inicio && (
+                <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Data Inicial</td><td>{fmtDate(contrato.data_inicio)}</td></tr>
+              )}
+              {contrato.data_fim && (
+                <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Data Final</td><td>{fmtDate(contrato.data_fim)}</td></tr>
+              )}
               {contrato.data_vencto_financeiro && (
-                <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Data de Vencimento</td><td>{fmtDate(contrato.data_vencto_financeiro)}</td></tr>
+                <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Vencimento Financeiro</td><td>{fmtDate(contrato.data_vencto_financeiro)}</td></tr>
+              )}
+              {contrato.origem_descricao && (
+                <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Origem (texto livre do ERP)</td><td style={{ fontSize: 12 }}>{contrato.origem_descricao}</td></tr>
               )}
               {typeof contrato.valor_unitario === "number" && (
                 <tr><td style={{ color: "var(--muted)", padding: "8px 0" }}>Valor Unitário</td><td><strong>{fmtBRL(contrato.valor_unitario)} / kg</strong></td></tr>
@@ -336,8 +396,24 @@ export function ContratoDetalheClientView({
         </Card>
       )}
 
-      <PublicarCargaModal open={publicarOpen} onClose={() => setPublicarOpen(false)} contratoIdInicial={contrato.id} />
-      <EditarContratoModal contrato={editarOpen ? contrato : null} onClose={() => setEditarOpen(false)} />
+      <PublicarCargaModal
+        open={publicarOpen}
+        onClose={() => setPublicarOpen(false)}
+        contratoIdInicial={contrato.id}
+        contratosSSR={[contrato]}
+        produtosSSR={produtosSSR}
+        locaisSSR={locaisSSR}
+        clientesSSR={clientesSSR}
+        transportadorasSSR={transportadorasSSR}
+      />
+      <EditarContratoModal
+        contrato={editarOpen ? contrato : null}
+        onClose={() => setEditarOpen(false)}
+        produtosSSR={produtosSSR}
+        clientesSSR={clientesSSR}
+        locaisSSR={locaisSSR}
+        terminaisSSR={terminaisSSR}
+      />
     </>
   );
 }

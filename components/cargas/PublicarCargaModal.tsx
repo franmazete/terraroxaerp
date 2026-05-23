@@ -12,16 +12,38 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { useRouter } from "next/navigation";
 import { publicarCargaAction } from "@/lib/api/actions";
 import { fmtKg, fmtBRL, fmtDate } from "@/lib/domain/format";
+import type { Cliente, Contrato, Local, Produto, Transportadora } from "@/lib/types";
 
 interface Props {
   open: boolean;
   onClose: () => void;
   /** Quando fornecido, pré-seleciona o contrato (útil para "Gerar carga deste contrato"). */
   contratoIdInicial?: string;
+  /** Dados SSR — usados quando o app roda em Supabase. */
+  contratosSSR?: Contrato[] | null;
+  produtosSSR?: Produto[] | null;
+  locaisSSR?: Local[] | null;
+  clientesSSR?: Cliente[] | null;
+  transportadorasSSR?: Transportadora[] | null;
 }
 
-export function PublicarCargaModal({ open, onClose, contratoIdInicial }: Props) {
-  const { publicarCarga, contratos, locais, produtos, clientes, transportadoras } = useDataStore();
+export function PublicarCargaModal({
+  open,
+  onClose,
+  contratoIdInicial,
+  contratosSSR = null,
+  produtosSSR = null,
+  locaisSSR = null,
+  clientesSSR = null,
+  transportadorasSSR = null,
+}: Props) {
+  const store = useDataStore();
+  const contratos = contratosSSR ?? store.contratos;
+  const locais = locaisSSR ?? store.locais;
+  const produtos = produtosSSR ?? store.produtos;
+  const clientes = clientesSSR ?? store.clientes;
+  const transportadoras = transportadorasSSR ?? store.transportadoras;
+  const { publicarCarga } = store;
   const toast = useToast();
   const { supabaseConfigured } = useAuth();
   const router = useRouter();

@@ -99,6 +99,61 @@ export async function disponibilizarContratoAction(id: string): Promise<ActionRe
   return { ok: true };
 }
 
+export async function atualizarContratoAction(
+  id: string,
+  patch: {
+    numero_manual?: string;
+    qtd_kg_total?: number;
+    saldo_kg?: number;
+    cliente_id?: string;
+    destino_local_id?: string;
+    terminal_id?: string;
+    data_emissao?: string;
+    data_vencto_financeiro?: string;
+    valor_unitario?: number;
+    valor_total?: number;
+    observacoes?: string;
+    status?: string;
+  },
+): Promise<ActionResult> {
+  const user = await getAuthUser();
+  if (!user) return { error: "Não autenticado" };
+  if (!["admin", "comercial", "logistica"].includes(user.perfil)) {
+    return { error: "Sem permissão para editar contratos" };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.from("contratos").update(patch).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/contratos");
+  revalidatePath(`/contratos/${id}`);
+  return { ok: true };
+}
+
+export async function excluirContratoAction(id: string): Promise<ActionResult> {
+  const user = await getAuthUser();
+  if (!user) return { error: "Não autenticado" };
+  if (!["admin", "comercial"].includes(user.perfil)) {
+    return { error: "Sem permissão para excluir contratos (apenas admin/comercial)" };
+  }
+  const supabase = await createClient();
+
+  // Bloqueia se tem cargas vinculadas
+  const { count: cargasCount } = await supabase
+    .from("cargas")
+    .select("id", { count: "exact", head: true })
+    .eq("contrato_id", id);
+  if ((cargasCount ?? 0) > 0) {
+    return {
+      error: `Contrato tem ${cargasCount} carga(s) vinculada(s). Cancele as cargas antes de excluir.`,
+    };
+  }
+
+  const { error } = await supabase.from("contratos").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/contratos");
+  return { ok: true };
+}
+
 /* ─── CARGAS ────────────────────────────────────────────────────────── */
 
 export async function publicarCargaAction(input: {

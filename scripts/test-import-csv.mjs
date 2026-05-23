@@ -261,9 +261,11 @@ for (const linha of linhas) {
   const valorSaca = parseNumberPtBR(linha.valorunit);
 
   if (APPLY) {
-    const numero = `ERP-${linha.estab}-${linha.contrato}`;
+    // Remove pontos do número do contrato (CSV vem "9.985", banco fica "9985")
+    const contratoLimpo = linha.contrato.replace(/\./g, "");
+    const numero = `ERP-${linha.estab}-${contratoLimpo}`;
     const payload = {
-      numero, numero_origem: linha.contrato, numero_manual: linha.contrato,
+      numero, numero_origem: contratoLimpo, numero_manual: contratoLimpo,
       tipo_contrato: tipo, produtor_id: produtorId, produto_id: produtoId,
       local_origem_id: null,
       qtd_kg_total: Math.round(qtdKg), saldo_kg: Math.round(saldoKg),

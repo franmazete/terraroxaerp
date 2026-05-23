@@ -18,13 +18,25 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { aprovarReservaAction, reprovarReservaAction } from "@/lib/api/actions";
 import { disponivelKg, percentualReservado, saldoColor } from "@/lib/domain/saldo";
 import { fmtKg, fmtDate } from "@/lib/domain/format";
-import type { Carga, Reserva } from "@/lib/types";
+import type { Carga, Cliente, Contrato, Local, Produto, Reserva, Transportadora } from "@/lib/types";
 
 interface Props {
   cargasSSR: Carga[] | null;
+  contratosSSR?: Contrato[] | null;
+  produtosSSR?: Produto[] | null;
+  locaisSSR?: Local[] | null;
+  clientesSSR?: Cliente[] | null;
+  transportadorasSSR?: Transportadora[] | null;
 }
 
-export function CargasClientView({ cargasSSR }: Props) {
+export function CargasClientView({
+  cargasSSR,
+  contratosSSR = null,
+  produtosSSR = null,
+  locaisSSR = null,
+  clientesSSR = null,
+  transportadorasSSR = null,
+}: Props) {
   const { user, supabaseConfigured } = useAuth();
   const toast = useToast();
   const confirmar = useConfirm();
@@ -197,7 +209,15 @@ export function CargasClientView({ cargasSSR }: Props) {
         );
       })}
 
-      <PublicarCargaModal open={publicarOpen} onClose={() => setPublicarOpen(false)} />
+      <PublicarCargaModal
+        open={publicarOpen}
+        onClose={() => setPublicarOpen(false)}
+        contratosSSR={contratosSSR}
+        produtosSSR={produtosSSR}
+        locaisSSR={locaisSSR}
+        clientesSSR={clientesSSR}
+        transportadorasSSR={transportadorasSSR}
+      />
       <DetalheReservaModal data={detalhe} onClose={() => setDetalhe(null)} />
     </>
   );

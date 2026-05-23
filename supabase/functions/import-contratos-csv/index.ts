@@ -250,11 +250,13 @@ async function processarLinha(
   const valorUnitario = valorSaca !== null ? +(valorSaca / 60).toFixed(6) : undefined;
 
   // 5. Upsert contrato
-  const numero = `ERP-${linha.estab}-${linha.contrato}`;
+  // Remove pontos do número (CSV vem "9.985", banco fica "9985")
+  const contratoLimpo = linha.contrato.replace(/\./g, "");
+  const numero = `ERP-${linha.estab}-${contratoLimpo}`;
   const insertPayload = {
     numero,
-    numero_origem: linha.contrato,
-    numero_manual: linha.contrato,
+    numero_origem: contratoLimpo,
+    numero_manual: contratoLimpo,
     tipo_contrato: tipo,
     produtor_id: produtorId,
     produto_id: produtoId,

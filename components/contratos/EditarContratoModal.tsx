@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { AlertBox } from "@/components/ui/AlertBox";
@@ -8,11 +9,18 @@ import { Field, FormRow, Input, Select, SectionLabel, Textarea } from "@/compone
 import { NumberInput } from "@/components/ui/NumberInput";
 import { useDataStore } from "@/lib/data-store";
 import { useToast } from "@/components/ui/Toast";
-import type { Contrato, ContratoStatus } from "@/lib/types";
+import { useAuth } from "@/lib/auth/AuthContext";
+import { atualizarContratoAction } from "@/lib/api/actions";
+import type { Cliente, Contrato, ContratoStatus, Local, Produto, Terminal } from "@/lib/types";
 
 interface Props {
   contrato: Contrato | null;
   onClose: () => void;
+  /** Dados SSR (Supabase). Quando ausentes, cai no useDataStore mock. */
+  produtosSSR?: Produto[] | null;
+  clientesSSR?: Cliente[] | null;
+  locaisSSR?: Local[] | null;
+  terminaisSSR?: Terminal[] | null;
 }
 
 const KG_POR_SACA = 60;
@@ -24,9 +32,24 @@ const STATUS_OPTIONS: { v: ContratoStatus; label: string }[] = [
   { v: "rascunho", label: "Rascunho" },
 ];
 
-export function EditarContratoModal({ contrato, onClose }: Props) {
-  const { atualizarContrato, clientes, locais, terminais, produtos } = useDataStore();
+export function EditarContratoModal({
+  contrato,
+  onClose,
+  produtosSSR = null,
+  clientesSSR = null,
+  locaisSSR = null,
+  terminaisSSR = null,
+}: Props) {
+  const store = useDataStore();
+  const { supabaseConfigured } = useAuth();
+  const router = useRouter();
+  const produtos = produtosSSR ?? store.produtos;
+  const clientes = clientesSSR ?? store.clientes;
+  const locais = locaisSSR ?? store.locais;
+  const terminais = terminaisSSR ?? store.terminais;
+  const { atualizarContrato } = store;
   const toast = useToast();
+  const [salvando, setSalvando] = useState(false);
 
   const [numeroManual, setNumeroManual] = useState("");
   const [qtdKgTotal, setQtdKgTotal] = useState<number | "">("");
@@ -75,7 +98,7 @@ export function EditarContratoModal({ contrato, onClose }: Props) {
     }
   }
 
-  function salvar() {
+  async function salvar() {
     if (qtdKgTotal === "" || qtdKgTotal <= 0) {
       toast.warn("Informe a quantidade total em kg.");
       return;
@@ -95,7 +118,7 @@ export function EditarContratoModal({ contrato, onClose }: Props) {
         ? +(valorSaca / KG_POR_SACA).toFixed(4)
         : undefined;
 
-    atualizarContrato(contrato!.id, {
+    const patch = {
       numero_manual: numeroManual || undefined,
       qtd_kg_total: qtdKgTotal as number,
       saldo_kg: novoSaldo,
@@ -105,12 +128,29 @@ export function EditarContratoModal({ contrato, onClose }: Props) {
       data_emissao: dataEmissao || undefined,
       data_vencto_financeiro: dataVencimento || undefined,
       valor_unitario: valorUnitarioKg,
-      valor_total: valorTotal === "" ? undefined : valorTotal,
+      valor_total: valorTotal === "" ? undefined : (valorTotal as number),
       observacoes: observacoes || undefined,
       status,
-    });
-    toast.success(`Contrato ${contrato!.numero_manual || contrato!.numero} atualizado.`);
-    onClose();
+    };
+
+    setSalvando(true);
+    try {
+      if (supabaseConfigured) {
+        const r = await atualizarContratoAction(contrato!.id, patch);
+        if ("error" in r) {
+          toast.error(r.error);
+          return;
+        }
+        toast.success(`Contrato ${contrato!.numero_manual || contrato!.numero} atualizado.`);
+        router.refresh();
+      } else {
+        atualizarContrato(contrato!.id, patch);
+        toast.success(`Contrato ${contrato!.numero_manual || contrato!.numero} atualizado.`);
+      }
+      onClose();
+    } finally {
+      setSalvando(false);
+    }
   }
 
   const destinoOpts = locais.filter(
@@ -126,8 +166,10 @@ export function EditarContratoModal({ contrato, onClose }: Props) {
       wide
       footer={
         <>
-          <Button onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" onClick={salvar}>Salvar alterações</Button>
+          <Button onClick={onClose} disabled={salvando}>Cancelar</Button>
+          <Button variant="primary" onClick={salvar} disabled={salvando}>
+            {salvando ? "Salvando..." : "Salvar alterações"}
+          </Button>
         </>
       }
     >
