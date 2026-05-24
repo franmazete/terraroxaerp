@@ -1,10 +1,12 @@
-"use client";
-
 import { KanbanBoard } from "@/components/reservas/KanbanBoard";
-import { useDataStore } from "@/lib/data-store";
+import { getCargas } from "@/lib/api/queries.server";
 
-export default function KanbanPage() {
-  const { cargas } = useDataStore();
+const SUPABASE_CONFIGURED =
+  !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
+  !process.env.NEXT_PUBLIC_SUPABASE_URL.includes("xxxxxxxx");
+
+export default async function KanbanPage() {
+  const cargas = SUPABASE_CONFIGURED ? await getCargas() : [];
   return (
     <>
       <div className="page-header">
