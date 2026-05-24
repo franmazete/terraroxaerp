@@ -274,6 +274,12 @@ export interface Contrato {
   produto_id: string;
   qtd_kg_total: number;
   saldo_kg: number;
+  /**
+   * Saldo em kg vindo do ERP de origem (CSV NQTDSALDO). Informativo —
+   * NÃO é usado nos cálculos do sistema. O `saldo_kg` real é mantido
+   * por trigger no Postgres baseado nas cargas publicadas.
+   */
+  qtd_kg_origem_erp?: number;
   /** Quantidade de cotas (Bloco I) — usado pra fatiar em cargas múltiplas. */
   quantidade_cotas?: number;
   /** Cliente comprador — pode ser definido depois (contratos têm essa flexibilidade). */

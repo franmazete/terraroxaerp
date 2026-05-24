@@ -243,7 +243,9 @@ async function processarLinha(
   const qtdKg = parseNumberPtBR(linha.quantidade);
   if (qtdKg === null || qtdKg <= 0) return rej(linha, `QUANTIDADE inválida: "${linha.quantidade}"`, produtorAcao);
 
-  const saldoKg = parseNumberPtBR(linha.nqtdsaldo) ?? qtdKg;
+  // NQTDSALDO é o saldo do ERP de origem — informativo, NÃO sobrescreve nosso saldo_kg.
+  // O saldo_kg real é recalculado pelo trigger no banco (qtd_kg_total - cargas publicadas).
+  const qtdOrigemErp = parseNumberPtBR(linha.nqtdsaldo);
   const valorTotal = parseNumberPtBR(linha.valortotal);
   const valorSaldo = parseNumberPtBR(linha.nvlrsaldo);
   const valorSaca = parseNumberPtBR(linha.valorunit);
@@ -262,7 +264,8 @@ async function processarLinha(
     produto_id: produtoId,
     local_origem_id: null,
     qtd_kg_total: Math.round(qtdKg),
-    saldo_kg: Math.round(saldoKg),
+    saldo_kg: Math.round(qtdKg), // trigger recalcula em seguida com base nas cargas
+    qtd_kg_origem_erp: qtdOrigemErp !== null ? Math.round(qtdOrigemErp) : null,
     safra: linha.descsafra || null,
     empresa_origem_codigo: linha.estab || null,
     origem_descricao: linha.origem || null,

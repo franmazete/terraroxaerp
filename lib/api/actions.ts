@@ -184,26 +184,13 @@ export async function publicarCargaAction(input: {
   const supabase = await createClient();
   const { transps_permitidas, ...cargaInput } = input;
 
-  // Insert carga + desconta saldo do contrato + insert allowlist
+  // Insert carga — trigger no banco recalcula contratos.saldo_kg automaticamente.
   const { data: carga, error: e1 } = await supabase
     .from("cargas")
     .insert({ ...cargaInput, status: "disponivel" })
     .select("id")
     .single();
   if (e1 || !carga) return { error: traduzirErro(e1 ?? { message: "Falha ao criar carga" }) };
-
-  // Desconta do saldo
-  const { data: ct } = await supabase
-    .from("contratos")
-    .select("saldo_kg")
-    .eq("id", input.contrato_id)
-    .single();
-  if (ct) {
-    await supabase
-      .from("contratos")
-      .update({ saldo_kg: Math.max(0, ct.saldo_kg - input.total_kg) })
-      .eq("id", input.contrato_id);
-  }
 
   // Allowlist
   if (transps_permitidas && transps_permitidas.length > 0) {
@@ -263,6 +250,8 @@ export async function criarReservaAction(input: {
 
   if (error || !data) return { error: traduzirErro(error ?? { message: "Falha ao reservar" }) };
 
+  // Trigger no banco ja incrementou cargas.reservado_kg automaticamente.
+
   // Cria pendência "aprovar_reserva" pra logística
   await criarPendenciaServer({
     reserva_id: data.id,
@@ -300,18 +289,7 @@ export async function reprovarReservaAction(reservaId: string): Promise<ActionRe
     .eq("id", reservaId);
   if (eUp) return { error: traduzirErro(eUp) };
 
-  // Devolve kg ao saldo da carga (reservado_kg -= qtd)
-  const { data: carga } = await supabase
-    .from("cargas")
-    .select("reservado_kg")
-    .eq("id", reserva.carga_id)
-    .single();
-  if (carga) {
-    await supabase
-      .from("cargas")
-      .update({ reservado_kg: Math.max(0, carga.reservado_kg - reserva.qtd_kg) })
-      .eq("id", reserva.carga_id);
-  }
+  // Trigger no banco recalcula cargas.reservado_kg (status reprovada nao conta).
 
   // Resolve pendência "aprovar_reserva" se houver
   await supabase
