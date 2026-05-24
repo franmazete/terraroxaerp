@@ -506,7 +506,10 @@ export async function anexarAutorizacaoAction(
       contentType: arquivo.type || "application/octet-stream",
       upsert: false,
     });
-  if (errUp) return { error: `Falha no upload: ${errUp.message}` };
+  if (errUp) {
+    console.error("[anexarAutorizacao] upload falhou:", errUp);
+    return { error: `Falha no upload: ${errUp.message}` };
+  }
 
   // 5. URL assinada de longa duração pra exibição (24h)
   const { data: signed } = await admin.storage
@@ -530,6 +533,7 @@ export async function anexarAutorizacaoAction(
     .select("id")
     .single();
   if (errAut || !auth) {
+    console.error("[anexarAutorizacao] insert autorização falhou:", errAut);
     // Rollback do storage
     await admin.storage.from("operacao").remove([path]);
     return { error: traduzirErro(errAut ?? { message: "Falha ao registrar autorização" }) };
@@ -567,31 +571,54 @@ export async function anexarAutorizacaoAction(
     .select("id, numero")
     .single();
   if (errOc || !oc) {
-    return { error: traduzirErro(errOc ?? { message: "Falha ao gerar OC" }) };
+    console.error("[anexarAutorizacao] insert OC falhou:", errOc, {
+      contrato_id: carga.contrato_id,
+      carga_id: cargaId,
+      reserva_id: reservaId,
+      local_carg_id: carga.origem_local_id,
+      destino_local_id: carga.destino_local_id,
+    });
+    // Rollback completo: deleta autorização e arquivo
+    await admin.from("autorizacoes_carregamento").delete().eq("id", auth.id);
+    await admin.storage.from("operacao").remove([path]);
+    return {
+      error: `Autorização recebida, mas falha ao gerar OC: ${
+        errOc?.message ?? "erro desconhecido"
+      }. Tente novamente; se persistir, contate o suporte.`,
+    };
   }
 
   // 9. Atualiza reserva.etapa = ordem_emitida
-  await admin
+  const { error: errResUp } = await admin
     .from("reservas")
     .update({ etapa: "ordem_emitida" })
     .eq("id", reservaId);
+  if (errResUp) console.error("[anexarAutorizacao] update reserva.etapa:", errResUp);
 
-  // 10. Resolve pendência "anexar_autorizacao_carreg" + cria "anexar_ticket_carreg" pra transp
-  await admin
+  // 10. Resolve pendência "anexar_autorizacao_carreg" + cria "anexar_ticket_carreg"
+  //     (usa admin pra não esbarrar em RLS de pendências)
+  const { error: errPendUp } = await admin
     .from("pendencias")
     .update({ status: "resolvida", resolvida_em: new Date().toISOString() })
     .eq("reserva_id", reservaId)
     .eq("categoria", "anexar_autorizacao_carreg")
     .eq("status", "aberta");
+  if (errPendUp) console.error("[anexarAutorizacao] resolver pendência autorização:", errPendUp);
 
-  await criarPendenciaServer({
+  const agora = new Date();
+  const venceTicket = new Date(agora.getTime() + 24 * 3600 * 1000);
+  const { error: errPendIns } = await admin.from("pendencias").insert({
     oc_id: oc.id,
     transp_id: user.transp_id,
     categoria: "anexar_ticket_carreg",
     setor_responsavel: "transportadora",
     sla_horas: 24,
     descricao: "Anexar ticket de carregamento e peso líquido",
+    criada_em: agora.toISOString(),
+    vence_em: venceTicket.toISOString(),
+    status: "aberta",
   });
+  if (errPendIns) console.error("[anexarAutorizacao] criar pendência ticket:", errPendIns);
 
   revalidatePath("/minhas-reservas");
   revalidatePath("/pendencias");
@@ -599,6 +626,122 @@ export async function anexarAutorizacaoAction(
   revalidatePath("/dashboard");
   revalidatePath(`/ordens/${oc.id}`);
   return { ok: true, data: { ocId: oc.id, ocNumero: oc.numero } };
+}
+
+/**
+ * Auto-cura: detecta autorizações já anexadas que NÃO têm OC vinculada e
+ * gera a OC retroativamente. Útil quando a action de anexar falhou no
+ * meio do processo (autorização registrada mas OC nunca foi criada).
+ *
+ * Quem pode disparar: cerealista (admin/logistica) ou a própria transp
+ * que é dona da autorização. Retorna lista das OCs criadas.
+ */
+export async function gerarOcsFaltantesAction(): Promise<
+  ActionResult<{ criadas: { ocNumero: string; reservaId: string }[] }>
+> {
+  const user = await getAuthUser();
+  if (!user) return { error: "Não autenticado" };
+
+  const admin = createAdminClient();
+
+  // 1. Pega autorizações sem OC vinculada
+  let q = admin
+    .from("autorizacoes_carregamento")
+    .select("id, reserva_id, carga_id, transp_id")
+    .order("anexada_em", { ascending: true });
+  if (user.perfil === "transportadora" && user.transp_id) {
+    q = q.eq("transp_id", user.transp_id);
+  }
+  const { data: autorizacoes, error: errAut } = await q;
+  if (errAut) return { error: traduzirErro(errAut) };
+
+  const criadas: { ocNumero: string; reservaId: string }[] = [];
+
+  for (const aut of autorizacoes ?? []) {
+    // Já tem OC?
+    const { data: ocExist } = await admin
+      .from("ordens_carregamento")
+      .select("id")
+      .or(`autorizacao_id.eq.${aut.id},reserva_id.eq.${aut.reserva_id}`)
+      .maybeSingle();
+    if (ocExist) continue;
+
+    // Busca reserva + carga
+    const { data: reserva } = await admin
+      .from("reservas")
+      .select("id, motorista_id, veiculo_id, qtd_kg, status")
+      .eq("id", aut.reserva_id)
+      .single();
+    if (!reserva || reserva.status !== "aprovada") continue;
+    if (!reserva.motorista_id || !reserva.veiculo_id) continue;
+
+    const { data: carga } = await admin
+      .from("cargas")
+      .select("id, contrato_id, origem_local_id, destino_local_id")
+      .eq("id", aut.carga_id)
+      .single();
+    if (!carga) continue;
+
+    const { count } = await admin
+      .from("ordens_carregamento")
+      .select("*", { count: "exact", head: true });
+    const ano = new Date().getFullYear();
+    const seq = String((count ?? 0) + 1).padStart(4, "0");
+    const numero = `OC-${ano}-${seq}`;
+
+    const { data: oc, error: errOc } = await admin
+      .from("ordens_carregamento")
+      .insert({
+        numero,
+        contrato_id: carga.contrato_id,
+        carga_id: aut.carga_id,
+        reserva_id: aut.reserva_id,
+        transp_id: aut.transp_id,
+        motorista_id: reserva.motorista_id,
+        veiculo_id: reserva.veiculo_id,
+        local_carg_id: carga.origem_local_id,
+        destino_local_id: carga.destino_local_id ?? null,
+        peso_previsto_kg: reserva.qtd_kg,
+        status: "emitida",
+        origem: "automatica_reserva",
+        emitida_em: new Date().toISOString().split("T")[0],
+        emitida_por_nome: "Sistema (auto-cura)",
+        status_operacional: "oc_emitida",
+        status_fiscal: "aguardando_nf",
+        status_financeiro: "aguardando_liberacao",
+        autorizacao_id: aut.id,
+      })
+      .select("id, numero")
+      .single();
+    if (errOc || !oc) {
+      console.error("[gerarOcsFaltantes] insert OC falhou:", errOc, { autorizacao_id: aut.id });
+      continue;
+    }
+
+    await admin.from("reservas").update({ etapa: "ordem_emitida" }).eq("id", aut.reserva_id);
+
+    const agora = new Date();
+    const venceTicket = new Date(agora.getTime() + 24 * 3600 * 1000);
+    await admin.from("pendencias").insert({
+      oc_id: oc.id,
+      transp_id: aut.transp_id,
+      categoria: "anexar_ticket_carreg",
+      setor_responsavel: "transportadora",
+      sla_horas: 24,
+      descricao: "Anexar ticket de carregamento e peso líquido",
+      criada_em: agora.toISOString(),
+      vence_em: venceTicket.toISOString(),
+      status: "aberta",
+    });
+
+    criadas.push({ ocNumero: oc.numero, reservaId: aut.reserva_id });
+  }
+
+  revalidatePath("/minhas-reservas");
+  revalidatePath("/pendencias");
+  revalidatePath("/painel");
+  revalidatePath("/dashboard");
+  return { ok: true, data: { criadas } };
 }
 
 /* ─── PLACEHOLDER de outras actions ─────────────────────────────────── *

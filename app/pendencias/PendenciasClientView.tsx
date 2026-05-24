@@ -49,7 +49,7 @@ const CORES: Record<EstadoUX, { bg: string; border: string; text: string }> = {
 
 export function PendenciasClientView({ dadosSSR, ehTransp }: Props) {
   const itens = dadosSSR ?? [];
-  const [filtro, setFiltro] = useState<Filtro>("minha_vez");
+  const [filtro, setFiltro] = useState<Filtro>("todas");
   const [aberto, setAberto] = useState<string | null>(null);
 
   /** Calcula resumos por carga (qual é a próxima ação, contagem de passos). */
