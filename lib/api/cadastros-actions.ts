@@ -55,6 +55,29 @@ async function requireCerealista(): Promise<
   return { ok: true, user: usuario as { id: string; nome: string; perfil: Perfil; transp_id?: string } };
 }
 
+/**
+ * Permite cerealista OU transportadora autenticada.
+ * Usado em cadastros GLOBAIS (motorista/veículo) que ambos os portais podem criar.
+ * Quem chamar deve validar que o transp_ids só inclui a própria transp quando for transportadora.
+ */
+async function requireUsuario(): Promise<
+  { ok: true; user: { id: string; nome: string; perfil: Perfil; transp_id?: string } } | { error: string }
+> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes("xxxxxxxx")) {
+    return { error: "Supabase não configurado" };
+  }
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!authUser) return { error: "Não autenticado" };
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("id, nome, perfil, transp_id")
+    .eq("auth_user_id", authUser.id)
+    .single();
+  if (!usuario) return { error: "Usuário não encontrado em public.usuarios" };
+  return { ok: true, user: usuario as { id: string; nome: string; perfil: Perfil; transp_id?: string } };
+}
+
 /* ═════════════════════════════════════════════════════════════════════
  * PRODUTOS
  * ═════════════════════════════════════════════════════════════════════ */
@@ -307,11 +330,19 @@ export async function criarMotorista(input: {
   foto_url?: string;
   transp_ids: string[];
 }): Promise<ActionResult<Motorista>> {
-  const auth = await requireCerealista();
+  const auth = await requireUsuario();
   if ("error" in auth) return { error: auth.error };
   if (!input.nome.trim()) return { error: "Informe o nome" };
   if (!input.cpf.trim()) return { error: "Informe o CPF" };
   if (!input.cnh.trim()) return { error: "Informe a CNH" };
+  // Transportadora só pode vincular o motorista à própria transp
+  if (auth.user.perfil === "transportadora") {
+    if (!auth.user.transp_id) return { error: "Usuário transportadora sem transp_id" };
+    if (input.transp_ids.length === 0) input.transp_ids = [auth.user.transp_id];
+    if (input.transp_ids.some((tid) => tid !== auth.user.transp_id)) {
+      return { error: "Transportadora só pode cadastrar motorista para a própria empresa" };
+    }
+  }
 
   const supabase = await createClient();
   const { transp_ids, ...motoristaInput } = input;
@@ -334,10 +365,17 @@ export async function criarMotorista(input: {
 }
 
 export async function atualizarMotorista(id: string, patch: Partial<Motorista>): Promise<ActionResult> {
-  const auth = await requireCerealista();
+  const auth = await requireUsuario();
   if ("error" in auth) return { error: auth.error };
   const supabase = await createClient();
   const { transp_ids, ...motoristaPatch } = patch;
+  // Transportadora não pode reescrever vínculos com outras transps
+  if (auth.user.perfil === "transportadora") {
+    if (!auth.user.transp_id) return { error: "Usuário transportadora sem transp_id" };
+    if (transp_ids && transp_ids.some((tid) => tid !== auth.user.transp_id)) {
+      return { error: "Transportadora só pode vincular à própria empresa" };
+    }
+  }
   const { error } = await supabase.from("motoristas").update(motoristaPatch).eq("id", id);
   if (error) return { error: traduzirErro(error) };
   // Atualiza vínculos N:N (delete + insert simples; idempotente)
@@ -354,8 +392,11 @@ export async function atualizarMotorista(id: string, patch: Partial<Motorista>):
 }
 
 export async function vincularMotoristaTransp(motoristaId: string, transpId: string): Promise<ActionResult> {
-  const auth = await requireCerealista();
+  const auth = await requireUsuario();
   if ("error" in auth) return { error: auth.error };
+  if (auth.user.perfil === "transportadora" && transpId !== auth.user.transp_id) {
+    return { error: "Transportadora só pode vincular à própria empresa" };
+  }
   const supabase = await createClient();
   const { error } = await supabase
     .from("motorista_transportadoras")
@@ -377,10 +418,17 @@ export async function criarVeiculo(input: {
   crlv_url?: string;
   transp_ids: string[];
 }): Promise<ActionResult<Veiculo>> {
-  const auth = await requireCerealista();
+  const auth = await requireUsuario();
   if ("error" in auth) return { error: auth.error };
   if (!input.placa_cavalo.trim()) return { error: "Informe a placa do cavalo" };
   if (input.capacidade_kg <= 0) return { error: "Capacidade inválida" };
+  if (auth.user.perfil === "transportadora") {
+    if (!auth.user.transp_id) return { error: "Usuário transportadora sem transp_id" };
+    if (input.transp_ids.length === 0) input.transp_ids = [auth.user.transp_id];
+    if (input.transp_ids.some((tid) => tid !== auth.user.transp_id)) {
+      return { error: "Transportadora só pode cadastrar veículo para a própria empresa" };
+    }
+  }
 
   const supabase = await createClient();
   const { transp_ids, ...veiculoInput } = input;
@@ -401,10 +449,16 @@ export async function criarVeiculo(input: {
 }
 
 export async function atualizarVeiculo(id: string, patch: Partial<Veiculo>): Promise<ActionResult> {
-  const auth = await requireCerealista();
+  const auth = await requireUsuario();
   if ("error" in auth) return { error: auth.error };
   const supabase = await createClient();
   const { transp_ids, ...veiculoPatch } = patch;
+  if (auth.user.perfil === "transportadora") {
+    if (!auth.user.transp_id) return { error: "Usuário transportadora sem transp_id" };
+    if (transp_ids && transp_ids.some((tid) => tid !== auth.user.transp_id)) {
+      return { error: "Transportadora só pode vincular à própria empresa" };
+    }
+  }
   const { error } = await supabase.from("veiculos").update(veiculoPatch).eq("id", id);
   if (error) return { error: traduzirErro(error) };
   if (transp_ids) {
@@ -420,8 +474,11 @@ export async function atualizarVeiculo(id: string, patch: Partial<Veiculo>): Pro
 }
 
 export async function vincularVeiculoTransp(veiculoId: string, transpId: string): Promise<ActionResult> {
-  const auth = await requireCerealista();
+  const auth = await requireUsuario();
   if ("error" in auth) return { error: auth.error };
+  if (auth.user.perfil === "transportadora" && transpId !== auth.user.transp_id) {
+    return { error: "Transportadora só pode vincular à própria empresa" };
+  }
   const supabase = await createClient();
   const { error } = await supabase
     .from("veiculo_transportadoras")
