@@ -11,11 +11,20 @@ import { BarChart } from "@/components/charts/BarChart";
 import { LineChart } from "@/components/charts/LineChart";
 import { PieChart } from "@/components/charts/PieChart";
 import { CORES_CHART } from "@/components/charts/palette";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { useDataStore } from "@/lib/data-store";
 import { fmtKg, fmtBRL } from "@/lib/domain/format";
+import type { DashSSRData } from "@/app/(cerealista)/dashboard/DashboardCerealistaClientView";
 
-export function DashComercial() {
-  const { contratos, cargas, transportadoras, produtores, produtos } = useDataStore();
+interface DashProps { dadosSSR?: DashSSRData | null }
+
+export function DashComercial({ dadosSSR = null }: DashProps) {
+  const { supabaseConfigured } = useAuth();
+  const store = useDataStore();
+  const usandoSSR = supabaseConfigured && dadosSSR !== null;
+  const { contratos, produtores, produtos } = store;
+  const cargas = usandoSSR ? dadosSSR!.cargas : store.cargas;
+  const transportadoras = usandoSSR ? dadosSSR!.transportadoras : store.transportadoras;
 
   const stats = useMemo(() => {
     const ativos = contratos.filter((c) => c.status === "ativo");

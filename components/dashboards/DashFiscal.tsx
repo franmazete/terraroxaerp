@@ -7,10 +7,19 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { StatBox } from "@/components/ui/StatBox";
 import { Badge } from "@/components/ui/Badge";
 import { AlertBox } from "@/components/ui/AlertBox";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { useDataStore } from "@/lib/data-store";
+import type { DashSSRData } from "@/app/(cerealista)/dashboard/DashboardCerealistaClientView";
 
-export function DashFiscal() {
-  const { ordens, notasFiscais, ctes, solicitacoesTrocaNota, dadosDescarga, faturamentos, pendencias } = useDataStore();
+interface DashProps { dadosSSR?: DashSSRData | null }
+
+export function DashFiscal({ dadosSSR = null }: DashProps) {
+  const { supabaseConfigured } = useAuth();
+  const store = useDataStore();
+  const usandoSSR = supabaseConfigured && dadosSSR !== null;
+  const { notasFiscais, ctes, solicitacoesTrocaNota, dadosDescarga, faturamentos } = store;
+  const ordens = usandoSSR ? dadosSSR!.ordens : store.ordens;
+  const pendencias = usandoSSR ? dadosSSR!.pendencias : store.pendencias;
 
   const stats = useMemo(() => {
     const nfsAtivas = notasFiscais.filter((n) => n.status === "ativa" || !n.status).length;

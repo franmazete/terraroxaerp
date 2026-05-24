@@ -8,8 +8,14 @@ import { StatBox } from "@/components/ui/StatBox";
 import { AlertBox } from "@/components/ui/AlertBox";
 import { useDataStore } from "@/lib/data-store";
 import { fmtBRL } from "@/lib/domain/format";
+import type { DashSSRData } from "@/app/(cerealista)/dashboard/DashboardCerealistaClientView";
 
-export function DashFinanceiro() {
+interface DashProps { dadosSSR?: DashSSRData | null }
+
+// Financeiro lê tabelas (faturamentos/pagamentos) que ainda não temos query SSR — usa store por enquanto.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function DashFinanceiro({ dadosSSR = null }: DashProps) {
+  void dadosSSR;
   const { faturamentos, pagamentos } = useDataStore();
 
   const stats = useMemo(() => {

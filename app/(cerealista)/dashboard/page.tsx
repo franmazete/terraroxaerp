@@ -1,24 +1,32 @@
-"use client";
+import {
+  getAutorizacoes,
+  getCargas,
+  getOrdens,
+  getPendenciasAbertas,
+  getTransportadoras,
+} from "@/lib/api/queries.server";
+import { DashboardCerealistaClientView } from "./DashboardCerealistaClientView";
 
-import { useAuth } from "@/lib/auth/AuthContext";
-import { DashComercial } from "@/components/dashboards/DashComercial";
-import { DashLogistica } from "@/components/dashboards/DashLogistica";
-import { DashFiscal } from "@/components/dashboards/DashFiscal";
-import { DashFinanceiro } from "@/components/dashboards/DashFinanceiro";
+const SUPABASE_CONFIGURED =
+  !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
+  !process.env.NEXT_PUBLIC_SUPABASE_URL.includes("xxxxxxxx");
 
-export default function DashboardCerealistaPage() {
-  const { user } = useAuth();
-  // Roteamento por perfil — cada setor vê seu dashboard específico (Bloco I.8)
-  switch (user?.perfil) {
-    case "comercial":
-      return <DashComercial />;
-    case "fiscal":
-      return <DashFiscal />;
-    case "financeiro":
-      return <DashFinanceiro />;
-    case "admin":
-    case "logistica":
-    default:
-      return <DashLogistica />;
+export default async function DashboardCerealistaPage() {
+  if (!SUPABASE_CONFIGURED) {
+    return <DashboardCerealistaClientView dadosSSR={null} />;
   }
+
+  const [cargas, ordens, pendencias, autorizacoes, transportadoras] = await Promise.all([
+    getCargas(),
+    getOrdens(),
+    getPendenciasAbertas(),
+    getAutorizacoes(),
+    getTransportadoras(),
+  ]);
+
+  return (
+    <DashboardCerealistaClientView
+      dadosSSR={{ cargas, ordens, pendencias, autorizacoes, transportadoras }}
+    />
+  );
 }

@@ -318,6 +318,20 @@ export async function getDocumentosDaOC(ocId: string): Promise<DocumentoOperacao
 
 /* ─── BLOCO J — Gating ──────────────────────────────────────────────── */
 
+export async function getAutorizacoes(): Promise<AutorizacaoCarregamento[]> {
+  if (NAO_CONFIGURADO) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("autorizacoes_carregamento")
+    .select("*")
+    .order("anexada_em", { ascending: false });
+  if (error) {
+    console.error("[queries.server] autorizacoes:", error.message);
+    return [];
+  }
+  return (data ?? []) as AutorizacaoCarregamento[];
+}
+
 export async function getAutorizacaoDaOC(ocId: string): Promise<AutorizacaoCarregamento | null> {
   if (NAO_CONFIGURADO) return null;
   const supabase = await createClient();

@@ -11,15 +11,25 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Timeline } from "@/components/ui/Timeline";
 import { PublicarCargaModal } from "@/components/cargas/PublicarCargaModal";
 import { ChecklistOC } from "@/components/checklist/ChecklistOC";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { useDataStore } from "@/lib/data-store";
 import { calcSeveridade } from "@/lib/domain/sla";
 import { calcChecklist, progressoChecklist } from "@/lib/domain/checklist";
 import { buildOCSnapshot } from "@/lib/domain/oc-snapshot";
 import type { PassoStatus } from "@/lib/domain/checklist";
+import type { DashSSRData } from "@/app/(cerealista)/dashboard/DashboardCerealistaClientView";
 
-export function DashLogistica() {
+interface DashProps { dadosSSR?: DashSSRData | null }
+
+export function DashLogistica({ dadosSSR = null }: DashProps) {
+  const { supabaseConfigured } = useAuth();
   const store = useDataStore();
-  const { ordens, cargas, pendencias, historico, autorizacoesCarregamento, transportadoras } = store;
+  const usandoSSR = supabaseConfigured && dadosSSR !== null;
+  const ordens = usandoSSR ? dadosSSR!.ordens : store.ordens;
+  const cargas = usandoSSR ? dadosSSR!.cargas : store.cargas;
+  const pendencias = usandoSSR ? dadosSSR!.pendencias : store.pendencias;
+  const autorizacoesCarregamento = usandoSSR ? dadosSSR!.autorizacoes : store.autorizacoesCarregamento;
+  const transportadoras = usandoSSR ? dadosSSR!.transportadoras : store.transportadoras;
   const [publicarOpen, setPublicarOpen] = useState(false);
   const [ocAberta, setOcAberta] = useState<string | null>(null);
 
@@ -47,7 +57,10 @@ export function DashLogistica() {
       refugada: boolean;
     };
     const ocsItem: ItemOC[] = ocsAtivas.map((oc) => {
-      const snap = buildOCSnapshot(oc.id, store)!;
+      const snapInputs = usandoSSR
+        ? { ...store, ordens, autorizacoesCarregamento }
+        : store;
+      const snap = buildOCSnapshot(oc.id, snapInputs)!;
       const passos = calcChecklist(snap);
       const progresso = progressoChecklist(passos);
       const proxPassoLog = passos.find((p) => p.status === "pendente" && p.setor === "logistica");
@@ -301,10 +314,10 @@ export function DashLogistica() {
           <CardHeader>
             <CardTitle>🕐 Histórico recente</CardTitle>
           </CardHeader>
-          {historico.length === 0 ? (
+          {(store.historico ?? []).length === 0 ? (
             <div style={{ fontSize: 12, color: "var(--hint)" }}>Sem eventos ainda.</div>
           ) : (
-            <Timeline events={historico.slice(0, 8)} />
+            <Timeline events={(store.historico ?? []).slice(0, 8)} />
           )}
         </Card>
       </div>
