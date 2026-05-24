@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { StatBox } from "@/components/ui/StatBox";
@@ -15,8 +14,6 @@ import { AnexarAutorizacaoModal } from "@/components/reservas/AnexarAutorizacaoM
 import { ChecklistOC } from "@/components/checklist/ChecklistOC";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useDataStore } from "@/lib/data-store";
-import { useToast } from "@/components/ui/Toast";
-import { gerarOcsFaltantesAction } from "@/lib/api/actions";
 import { disponivelKg } from "@/lib/domain/saldo";
 import { fmtKg } from "@/lib/domain/format";
 import { calcSeveridade } from "@/lib/domain/sla";
@@ -79,36 +76,6 @@ export function PainelTranspClientView({ dadosSSR = null }: Props) {
     [stats.aprovadas, autorizacoesSSR],
   );
 
-  // Autorizações anexadas SEM OC vinculada → pode ter ficado órfã por falha
-  const autorizacoesSemOC = useMemo(() => {
-    const reservasComOc = new Set(ordens.map((o) => o.reserva_id).filter(Boolean) as string[]);
-    return autorizacoesSSR.filter((a) => !reservasComOc.has(a.reserva_id));
-  }, [autorizacoesSSR, ordens]);
-
-  const toast = useToast();
-  const router = useRouter();
-  const [gerando, setGerando] = useState(false);
-  async function tentarGerarOCs() {
-    setGerando(true);
-    try {
-      const r = await gerarOcsFaltantesAction();
-      if ("error" in r) {
-        toast.error(r.error);
-        return;
-      }
-      if (r.data!.criadas.length === 0) {
-        toast.info("Nenhuma OC pendente — todas suas autorizações já têm OC.");
-      } else {
-        toast.success(
-          `${r.data!.criadas.length} OC(s) gerada(s): ${r.data!.criadas.map((c) => c.ocNumero).join(", ")}`,
-          "Ordens criadas",
-        );
-        router.refresh();
-      }
-    } finally {
-      setGerando(false);
-    }
-  }
 
   return (
     <>
@@ -149,23 +116,6 @@ export function PainelTranspClientView({ dadosSSR = null }: Props) {
         </div>
       )}
 
-      {autorizacoesSemOC.length > 0 && (
-        <div className="section-gap">
-          <AlertBox
-            tone="amber"
-            icon="⚠️"
-            title={`${autorizacoesSemOC.length} autorização(ões) anexada(s) sem OC gerada`}
-            actions={
-              <Button size="sm" variant="primary" onClick={tentarGerarOCs} disabled={gerando}>
-                {gerando ? "Gerando..." : "🔧 Gerar OCs faltantes"}
-              </Button>
-            }
-          >
-            Sua autorização foi anexada mas a Ordem de Carregamento não foi gerada automaticamente. Clique
-            para tentar criar a(s) OC(s) agora.
-          </AlertBox>
-        </div>
-      )}
 
       {aguardandoAutorizacao.length > 0 && (
         <div className="section-gap">

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { StatBox } from "@/components/ui/StatBox";
@@ -13,6 +14,8 @@ import { PublicarCargaModal } from "@/components/cargas/PublicarCargaModal";
 import { ChecklistOC } from "@/components/checklist/ChecklistOC";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useDataStore } from "@/lib/data-store";
+import { useToast } from "@/components/ui/Toast";
+import { gerarOcsFaltantesAction } from "@/lib/api/actions";
 import { calcSeveridade } from "@/lib/domain/sla";
 import { calcChecklist, progressoChecklist } from "@/lib/domain/checklist";
 import { buildOCSnapshot } from "@/lib/domain/oc-snapshot";
@@ -90,6 +93,16 @@ export function DashLogistica({ dadosSSR = null }: DashProps) {
       return new Date(aut.anexada_em).getTime() >= agora24h;
     });
 
+    // Autorizações já anexadas pela transp mas SEM OC vinculada
+    // (a OC deveria ter sido gerada automaticamente — geralmente é, mas se
+    //  a Server Action falhar na metade, sobra autorização órfã.)
+    const ocsReservaIds = new Set(
+      ordens.map((o) => o.reserva_id).filter(Boolean) as string[],
+    );
+    const autorizacoesOrfas = autorizacoesCarregamento.filter(
+      (a) => !ocsReservaIds.has(a.reserva_id),
+    );
+
     return {
       reservasPendentes,
       ocsAtivas,
@@ -100,8 +113,35 @@ export function DashLogistica({ dadosSSR = null }: DashProps) {
       ocsItem,
       aguardandoLog,
       recemCriadas,
+      autorizacoesOrfas,
     };
   }, [cargas, ordens, pendencias, autorizacoesCarregamento, transportadoras, store]);
+
+  // Auto-cura: gera OC para autorizações órfãs (botão visível só para cerealista)
+  const router = useRouter();
+  const toast = useToast();
+  const [gerando, setGerando] = useState(false);
+  async function tentarGerarOCs() {
+    setGerando(true);
+    try {
+      const r = await gerarOcsFaltantesAction();
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      if (r.data!.criadas.length === 0) {
+        toast.info("Nenhuma autorização órfã — todas já têm OC.");
+      } else {
+        toast.success(
+          `${r.data!.criadas.length} OC(s) gerada(s): ${r.data!.criadas.map((c) => c.ocNumero).join(", ")}`,
+          "Ordens criadas",
+        );
+        router.refresh();
+      }
+    } finally {
+      setGerando(false);
+    }
+  }
 
   return (
     <>
@@ -126,6 +166,25 @@ export function DashLogistica({ dadosSSR = null }: DashProps) {
         <StatBox tone="t" label="Em Trânsito" value={stats.emTransito} sub="caminhão na estrada" />
         <StatBox tone="g" label="Descarregadas" value={stats.descarregadas} sub="aguardando validação fiscal" />
       </div>
+
+      {stats.autorizacoesOrfas.length > 0 && (
+        <div className="section-gap">
+          <AlertBox
+            tone="amber"
+            icon="⚠️"
+            title={`${stats.autorizacoesOrfas.length} autorização(ões) sem OC gerada`}
+            actions={
+              <Button size="sm" variant="primary" onClick={tentarGerarOCs} disabled={gerando}>
+                {gerando ? "Gerando..." : "🔧 Gerar OCs faltantes"}
+              </Button>
+            }
+          >
+            Transportadora(s) anexou autorização de carregamento mas a Ordem de Carregamento interna
+            não foi gerada automaticamente. Clique para criar as OCs agora — vincula motorista, placa,
+            origem e produtor conforme a reserva aprovada.
+          </AlertBox>
+        </div>
+      )}
 
       {stats.atrasadas > 0 && (
         <div className="section-gap">
