@@ -152,10 +152,20 @@ export function DashLogistica({ dadosSSR = null }: DashProps) {
             OCs ativas, trânsito e atalhos por etapa do fluxo
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link href="/pendencias">
             <Button>📋 Fila operacional</Button>
           </Link>
+          <Link href="/ordens">
+            <Button>📄 Todas as OCs</Button>
+          </Link>
+          <Button
+            onClick={tentarGerarOCs}
+            disabled={gerando}
+            title="Verifica autorizações anexadas pelas transportadoras que ainda não geraram OC e cria as faltantes"
+          >
+            {gerando ? "Verificando..." : "🔧 Gerar OCs faltantes"}
+          </Button>
           <Button variant="primary" onClick={() => setPublicarOpen(true)}>📦 Publicar Carga</Button>
         </div>
       </div>
