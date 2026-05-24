@@ -1,4 +1,4 @@
-import type { ReactNode, InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import { useId, useRef, useState, type ReactNode, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import s from "./Form.module.css";
 
 export function FormRow({ children, variant }: { children: ReactNode; variant?: "single" | "triple" }) {
@@ -41,15 +41,68 @@ interface UploadProps {
   icon?: ReactNode;
   required?: boolean;
   optional?: boolean;
+  /** Quando definido, abre file picker real e devolve o arquivo escolhido. */
+  onFileSelected?: (file: File) => void;
+  /** Tipos aceitos (default: PDF + imagens). */
+  accept?: string;
+  /** Fallback antigo — quando onFileSelected não é definido, dispara este onClick. */
   onClick?: () => void;
 }
-export function UploadZone({ label, icon = "📄", required, optional, onClick }: UploadProps) {
+export function UploadZone({
+  label,
+  icon = "📄",
+  required,
+  optional,
+  onFileSelected,
+  accept = "application/pdf,image/*",
+  onClick,
+}: UploadProps) {
+  const inputId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [arquivoSel, setArquivoSel] = useState<string | null>(null);
+
+  function handleClick() {
+    if (onFileSelected) {
+      inputRef.current?.click();
+    } else if (onClick) {
+      onClick();
+    }
+  }
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setArquivoSel(file.name);
+    onFileSelected?.(file);
+  }
+
   return (
-    <div className={s.upload} title="Upload real virá com Supabase Storage (Etapa 4)" onClick={onClick}>
-      <div className={s.upIcon}>{icon}</div>
-      <p>{label}</p>
-      {required && <div className={s.req}>Obrigatório · PDF ou imagem</div>}
-      {optional && <p style={{ fontSize: 10, color: "var(--hint)" }}>Opcional</p>}
-    </div>
+    <>
+      {onFileSelected && (
+        <input
+          ref={inputRef}
+          id={inputId}
+          type="file"
+          accept={accept}
+          style={{ display: "none" }}
+          onChange={handleChange}
+        />
+      )}
+      <div
+        className={s.upload}
+        onClick={handleClick}
+        style={{ cursor: "pointer" }}
+      >
+        <div className={s.upIcon}>{icon}</div>
+        <p>{arquivoSel ? `✓ ${arquivoSel}` : label}</p>
+        {required && !arquivoSel && <div className={s.req}>Obrigatório · PDF ou imagem</div>}
+        {optional && !arquivoSel && <p style={{ fontSize: 10, color: "var(--hint)" }}>Opcional</p>}
+        {arquivoSel && (
+          <p style={{ fontSize: 10, color: "var(--g600)", marginTop: 4 }}>
+            Clique para trocar
+          </p>
+        )}
+      </div>
+    </>
   );
 }

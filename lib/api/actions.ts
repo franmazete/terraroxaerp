@@ -17,7 +17,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { traduzirErro } from "./erros-pt";
 import type { Perfil, Pendencia } from "@/lib/types";
 
@@ -428,6 +428,177 @@ export async function cancelarOrdemAction(input: {
   revalidatePath("/ordens");
   revalidatePath(`/ordens/${input.oc_id}`);
   return { ok: true };
+}
+
+/* ─── BLOCO J — ANEXAR AUTORIZAÇÃO DE CARREGAMENTO → GERA OC ────────── */
+
+/**
+ * Recebe FormData com:
+ *   - arquivo: File (PDF/imagem)
+ *   - reserva_id: string
+ *   - carga_id: string
+ *   - observacoes?: string
+ *
+ * Faz: upload no bucket "operacao" → INSERT autorizacoes_carregamento →
+ * INSERT ordens_carregamento (gera OC) → UPDATE reserva.etapa →
+ * resolve pendência de autorização + cria pendência de ticket pra transp.
+ *
+ * Usa createAdminClient pra evitar fricção de policies (a OC ainda não
+ * existe quando a transp sobe o arquivo). Valida ownership da reserva
+ * antes de qualquer escrita.
+ */
+export async function anexarAutorizacaoAction(
+  formData: FormData,
+): Promise<ActionResult<{ ocId: string; ocNumero: string }>> {
+  const user = await getAuthUser();
+  if (!user) return { error: "Não autenticado" };
+  if (user.perfil !== "transportadora" || !user.transp_id) {
+    return { error: "Apenas transportadoras podem anexar autorização" };
+  }
+
+  const arquivo = formData.get("arquivo") as File | null;
+  const reservaId = formData.get("reserva_id") as string | null;
+  const cargaId = formData.get("carga_id") as string | null;
+  const observacoes = (formData.get("observacoes") as string | null) ?? undefined;
+
+  if (!arquivo || arquivo.size === 0) return { error: "Selecione um arquivo." };
+  if (!reservaId || !cargaId) return { error: "Reserva/carga inválida." };
+  if (arquivo.size > 20 * 1024 * 1024) return { error: "Arquivo maior que 20MB." };
+
+  const admin = createAdminClient();
+
+  // 1. Valida que a reserva é dessa transp e está aprovada
+  const { data: reserva, error: errRes } = await admin
+    .from("reservas")
+    .select("id, carga_id, transp_id, motorista_id, veiculo_id, qtd_kg, status, transp_nome")
+    .eq("id", reservaId)
+    .single();
+  if (errRes || !reserva) return { error: "Reserva não encontrada." };
+  if (reserva.transp_id !== user.transp_id) return { error: "Esta reserva não é da sua transportadora." };
+  if (reserva.status !== "aprovada") return { error: "Reserva precisa estar aprovada." };
+  if (!reserva.motorista_id || !reserva.veiculo_id) {
+    return { error: "Reserva sem motorista/veículo definidos." };
+  }
+
+  // 2. Verifica que ainda não tem autorização
+  const { data: jaTem } = await admin
+    .from("autorizacoes_carregamento")
+    .select("id")
+    .eq("reserva_id", reservaId)
+    .maybeSingle();
+  if (jaTem) return { error: "Esta reserva já tem autorização anexada." };
+
+  // 3. Busca dados da carga (contrato, locais) pra montar a OC
+  const { data: carga, error: errCar } = await admin
+    .from("cargas")
+    .select("id, contrato_id, origem_local_id, destino_local_id")
+    .eq("id", cargaId)
+    .single();
+  if (errCar || !carga) return { error: "Carga não encontrada." };
+
+  // 4. Upload do arquivo no bucket "operacao"
+  const ext = arquivo.name.split(".").pop() ?? "pdf";
+  const timestamp = Date.now();
+  const path = `autorizacoes/${reservaId}/${timestamp}.${ext}`;
+  const { error: errUp } = await admin.storage
+    .from("operacao")
+    .upload(path, arquivo, {
+      contentType: arquivo.type || "application/octet-stream",
+      upsert: false,
+    });
+  if (errUp) return { error: `Falha no upload: ${errUp.message}` };
+
+  // 5. URL assinada de longa duração pra exibição (24h)
+  const { data: signed } = await admin.storage
+    .from("operacao")
+    .createSignedUrl(path, 60 * 60 * 24);
+  const arquivoUrl = signed?.signedUrl ?? path;
+
+  // 6. INSERT autorizacoes_carregamento
+  const { data: auth, error: errAut } = await admin
+    .from("autorizacoes_carregamento")
+    .insert({
+      reserva_id: reservaId,
+      carga_id: cargaId,
+      transp_id: user.transp_id,
+      arquivo_url: arquivoUrl,
+      nome_arquivo: arquivo.name,
+      observacoes,
+      anexada_por_user_id: user.id,
+      anexada_por_nome: user.nome,
+    })
+    .select("id")
+    .single();
+  if (errAut || !auth) {
+    // Rollback do storage
+    await admin.storage.from("operacao").remove([path]);
+    return { error: traduzirErro(errAut ?? { message: "Falha ao registrar autorização" }) };
+  }
+
+  // 7. Gera número da OC (ano + sequencial baseado em count)
+  const { count } = await admin.from("ordens_carregamento").select("*", { count: "exact", head: true });
+  const ano = new Date().getFullYear();
+  const seq = String((count ?? 0) + 1).padStart(4, "0");
+  const numero = `OC-${ano}-${seq}`;
+
+  // 8. INSERT ordens_carregamento
+  const { data: oc, error: errOc } = await admin
+    .from("ordens_carregamento")
+    .insert({
+      numero,
+      contrato_id: carga.contrato_id,
+      carga_id: cargaId,
+      reserva_id: reservaId,
+      transp_id: user.transp_id,
+      motorista_id: reserva.motorista_id,
+      veiculo_id: reserva.veiculo_id,
+      local_carg_id: carga.origem_local_id,
+      destino_local_id: carga.destino_local_id ?? null,
+      peso_previsto_kg: reserva.qtd_kg,
+      status: "emitida",
+      origem: "automatica_reserva",
+      emitida_em: new Date().toISOString().split("T")[0],
+      emitida_por_nome: "Sistema (autorização anexada)",
+      status_operacional: "oc_emitida",
+      status_fiscal: "aguardando_nf",
+      status_financeiro: "aguardando_liberacao",
+      autorizacao_id: auth.id,
+    })
+    .select("id, numero")
+    .single();
+  if (errOc || !oc) {
+    return { error: traduzirErro(errOc ?? { message: "Falha ao gerar OC" }) };
+  }
+
+  // 9. Atualiza reserva.etapa = ordem_emitida
+  await admin
+    .from("reservas")
+    .update({ etapa: "ordem_emitida" })
+    .eq("id", reservaId);
+
+  // 10. Resolve pendência "anexar_autorizacao_carreg" + cria "anexar_ticket_carreg" pra transp
+  await admin
+    .from("pendencias")
+    .update({ status: "resolvida", resolvida_em: new Date().toISOString() })
+    .eq("reserva_id", reservaId)
+    .eq("categoria", "anexar_autorizacao_carreg")
+    .eq("status", "aberta");
+
+  await criarPendenciaServer({
+    oc_id: oc.id,
+    transp_id: user.transp_id,
+    categoria: "anexar_ticket_carreg",
+    setor_responsavel: "transportadora",
+    sla_horas: 24,
+    descricao: "Anexar ticket de carregamento e peso líquido",
+  });
+
+  revalidatePath("/minhas-reservas");
+  revalidatePath("/pendencias");
+  revalidatePath("/painel");
+  revalidatePath("/dashboard");
+  revalidatePath(`/ordens/${oc.id}`);
+  return { ok: true, data: { ocId: oc.id, ocNumero: oc.numero } };
 }
 
 /* ─── PLACEHOLDER de outras actions ─────────────────────────────────── *

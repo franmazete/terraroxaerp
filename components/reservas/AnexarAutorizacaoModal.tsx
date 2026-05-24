@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { AlertBox } from "@/components/ui/AlertBox";
-import { Field, FormRow, Input, Textarea, UploadZone } from "@/components/ui/Form";
+import { Field, FormRow, Textarea, UploadZone } from "@/components/ui/Form";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useDataStore } from "@/lib/data-store";
 import { useToast } from "@/components/ui/Toast";
+import { anexarAutorizacaoAction } from "@/lib/api/actions";
 import type { Carga, Reserva } from "@/lib/types";
 
 interface Props {
@@ -18,44 +20,80 @@ interface Props {
 }
 
 export function AnexarAutorizacaoModal({ data, onClose, onSuccess }: Props) {
-  const { user } = useAuth();
+  const { user, supabaseConfigured } = useAuth();
   const toast = useToast();
+  const router = useRouter();
   const { anexarAutorizacaoCarregamento } = useDataStore();
-  const [arquivoUrl, setArquivoUrl] = useState("");
-  const [nomeArquivo, setNomeArquivo] = useState("");
+  const [arquivo, setArquivo] = useState<File | null>(null);
   const [observacoes, setObservacoes] = useState("");
+  const [enviando, setEnviando] = useState(false);
 
   if (!data || !user) return null;
   const { carga, reserva } = data;
 
-  function submit() {
-    if (!nomeArquivo.trim()) { toast.warn("Informe o nome do arquivo de autorização."); return; }
-    const r = anexarAutorizacaoCarregamento({
-      reserva_id: reserva.id,
-      carga_id: carga.id,
-      transp_id: reserva.transp_id,
-      arquivo_url: arquivoUrl || "pending-upload://" + nomeArquivo,
-      nome_arquivo: nomeArquivo,
-      observacoes: observacoes || undefined,
-      anexada_por_user_id: user!.usuario_id,
-      anexada_por_nome: user!.nome,
-    });
-    if (!r) {
-      toast.error(
-        "Verifique se a reserva está aprovada, com motorista/veículo definidos e ainda não tem autorização anexada.",
-        "Não foi possível anexar",
-      );
+  async function submit() {
+    if (!user) return;
+    if (!arquivo) {
+      toast.warn("Selecione o arquivo da autorização.");
       return;
     }
-    toast.success(
-      `OC ${r.oc.numero} gerada automaticamente. Aguarde instruções da logística.`,
-      "Autorização anexada",
-    );
-    setArquivoUrl("");
-    setNomeArquivo("");
-    setObservacoes("");
-    onSuccess?.();
-    onClose();
+
+    setEnviando(true);
+    try {
+      if (supabaseConfigured) {
+        // Modo real: monta FormData e chama Server Action
+        const fd = new FormData();
+        fd.append("arquivo", arquivo);
+        fd.append("reserva_id", reserva.id);
+        fd.append("carga_id", carga.id);
+        if (observacoes.trim()) fd.append("observacoes", observacoes.trim());
+
+        const res = await anexarAutorizacaoAction(fd);
+        if ("error" in res) {
+          toast.error(res.error);
+          return;
+        }
+        toast.success(
+          `OC ${res.data!.ocNumero} gerada automaticamente. Aguarde instruções da logística.`,
+          "Autorização anexada",
+        );
+        setArquivo(null);
+        setObservacoes("");
+        router.refresh();
+        onSuccess?.();
+        onClose();
+        return;
+      }
+
+      // Fallback mock
+      const r = anexarAutorizacaoCarregamento({
+        reserva_id: reserva.id,
+        carga_id: carga.id,
+        transp_id: reserva.transp_id,
+        arquivo_url: "mock://" + arquivo.name,
+        nome_arquivo: arquivo.name,
+        observacoes: observacoes || undefined,
+        anexada_por_user_id: user.usuario_id,
+        anexada_por_nome: user.nome,
+      });
+      if (!r) {
+        toast.error(
+          "Verifique se a reserva está aprovada, com motorista/veículo definidos e ainda não tem autorização anexada.",
+          "Não foi possível anexar",
+        );
+        return;
+      }
+      toast.success(
+        `OC ${r.oc.numero} gerada automaticamente.`,
+        "Autorização anexada",
+      );
+      setArquivo(null);
+      setObservacoes("");
+      onSuccess?.();
+      onClose();
+    } finally {
+      setEnviando(false);
+    }
   }
 
   return (
@@ -67,9 +105,9 @@ export function AnexarAutorizacaoModal({ data, onClose, onSuccess }: Props) {
       wide
       footer={
         <>
-          <Button onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" onClick={submit}>
-            ✓ Confirmar e gerar OC
+          <Button onClick={onClose} disabled={enviando}>Cancelar</Button>
+          <Button variant="primary" onClick={submit} disabled={enviando}>
+            {enviando ? "Enviando..." : "✓ Confirmar e gerar OC"}
           </Button>
         </>
       }
@@ -81,23 +119,24 @@ export function AnexarAutorizacaoModal({ data, onClose, onSuccess }: Props) {
       </AlertBox>
 
       <FormRow variant="single">
-        <Field label="Arquivo da autorização">
-          <UploadZone label="Clique para anexar o PDF da autorização" icon="📄" required />
+        <Field label="Arquivo da autorização *" hint="PDF ou imagem · até 20MB">
+          <UploadZone
+            label="Clique para escolher o arquivo da autorização"
+            icon="📄"
+            required
+            onFileSelected={setArquivo}
+            accept="application/pdf,image/*"
+          />
         </Field>
       </FormRow>
+
       <FormRow variant="single">
-        <Field label="Nome do arquivo *" hint="No mock, informe o nome do arquivo. Upload real virá na Etapa 4 (Supabase Storage).">
-          <Input value={nomeArquivo} onChange={(e) => setNomeArquivo(e.target.value)} placeholder="Ex: autorizacao_TR-001_CRG-001.pdf" />
-        </Field>
-      </FormRow>
-      <FormRow variant="single">
-        <Field label="URL temporária (opcional)" hint="Cole uma URL pública pra teste de visualização">
-          <Input value={arquivoUrl} onChange={(e) => setArquivoUrl(e.target.value)} placeholder="https://..." />
-        </Field>
-      </FormRow>
-      <FormRow variant="single">
-        <Field label="Observações">
-          <Textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Informações adicionais relevantes..." />
+        <Field label="Observações (opcional)">
+          <Textarea
+            value={observacoes}
+            onChange={(e) => setObservacoes(e.target.value)}
+            placeholder="Informações adicionais relevantes..."
+          />
         </Field>
       </FormRow>
     </Modal>
