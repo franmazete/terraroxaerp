@@ -1,167 +1,246 @@
 # Importação de Contratos via CSV
 
-Sistema de importação batch de contratos vindos do ERP de origem.
+Importação batch de contratos vindos do ERP de origem (Terra Roxa) para o banco do terraroxa.
 
-## Fluxo
+---
+
+## 📤 Fluxo de uso
 
 ```
 ERP de origem
     │
-    │ exporta CSV no padrão definido
+    │ 1. Exporta CSV no padrão definido (separador ;, encoding Latin-1)
     ↓
-Supabase Storage
-  bucket: importacoes
-    └── contratos/
-         ├── pendentes/       ← arquivos aguardando importação
-         ├── processados/<ts> ← arquivos já importados
-         └── erros/<ts>.csv   ← relatório de linhas rejeitadas
+Supabase Storage  →  bucket "importacoes"
+   contratos/
+   ├── pendentes/      ← VOCÊ coloca o arquivo aqui
+   ├── processados/<ts>/   ← arquivo movido após sucesso
+   └── erros/<ts>_<nome>.csv ← linhas rejeitadas
     │
-    │ Edge Function `import-contratos-csv` é disparada
-    │ (manual ou via cron a definir)
+    │ 2. Você dispara a Edge Function `import-contratos-csv`
+    │    (via Supabase Dashboard → Edge Functions → Invoke,
+    │     ou via `supabase functions invoke import-contratos-csv`)
     ↓
-Supabase Postgres
-  tabela: contratos
+Postgres:
+  • contratos: 1 linha inserida ou atualizada por linha do CSV
+  • produtores: criado se não existir, atualizado se já tiver (de-para por CPF/CNPJ)
+  • importacao_log: registro do lote com sucesso/parcial/erro
 ```
 
-## Formato esperado do CSV
+Após o processamento:
+- arquivo original vai pra `processados/<timestamp>/<nome>` (preservado)
+- linhas rejeitadas viram um CSV em `erros/<timestamp>_<nome>.csv`
+- log do lote fica em `public.importacao_log` (consulta SQL)
 
-**Encoding**: Latin-1 (CP1252) — o parser converte automaticamente pra UTF-8.
-**Separador**: `;` (ponto-e-vírgula).
-**Decimal**: vírgula. **Separador de milhar**: ponto. (Padrão pt-BR.)
-**Datas**: `dd.mm.yyyy`.
+---
 
-### Cabeçalho obrigatório (ordem pode variar)
+## 📝 Formato esperado do CSV
 
-| Coluna | Conteúdo | Exemplo |
-|---|---|---|
-| `ESTAB` | Código do estabelecimento (informativo) | `5` ou `6` |
-| `TIPO` | `COMPRA` ou `VENDA` | `COMPRA` |
-| `CONTRATO` | Número do contrato no ERP | `10.244` |
-| `DESCSAFRA` | Safra | `26-2026` |
-| `DTEMISSAO` | Data de emissão | `03.03.2026` |
-| `DTVENCTO` | Data vencimento financeiro | `20.03.2026` |
-| `DTINICIO` | Data inicial do contrato | `04.03.2026` |
-| `DTFINAL` | Data final do contrato | `30.04.2026` |
-| `PRODUTOR` | Código + nome do produtor | `5138, ANDREA VICENTINI` |
-| `PRODUTO` | Código + nome do produto | `3, SOJA A GRANEL` |
-| `QUANTIDADE` | Quantidade em **kg** | `180.000` |
-| `VALORUNIT` | R$ por saca de 60kg | `118` |
-| `VALORTOTAL` | Valor total em R$ | `353.299` |
-| `ORIGEM` | Cidade-UF + razão (opcional, livre) | `Pedrinhas Paulista-SP, ANDREA VICENTINI` |
-| `NQTDSALDO` | Saldo restante em kg | `24.000` |
-| `NVLRSALDO` | Saldo financeiro em R$ | (vazio ou número) |
+| Aspecto       | Valor                                                         |
+| ------------- | ------------------------------------------------------------- |
+| Encoding      | **Latin-1 (CP1252)** — parser converte para UTF-8             |
+| Separador     | `;` (ponto-e-vírgula)                                         |
+| Decimal       | vírgula (ex: `1.234,56` → `1234.56`)                          |
+| Separador mil | ponto                                                         |
+| Data          | `dd.mm.yyyy` (ex: `15.03.2026`)                               |
+| Códigos       | `<codigo>-<nome>` (ex: `270-OTAVIO JOVELLI`, `3-SOJA GRANEL`) |
 
-## Regras de de-para
+**Linha 1 = cabeçalho.** Demais linhas = dados.
 
-### TIPO
-| CSV | Sistema |
-|---|---|
-| `COMPRA` | `compra` |
-| `VENDA` | `venda` |
+### Cabeçalho (ordem fixa, separado por `;`)
 
-Linha com TIPO diferente → **rejeitada**.
-
-### PRODUTO
-Pega o nome após a vírgula (`3, SOJA A GRANEL` → `SOJA A GRANEL`), normaliza (uppercase + remove acentos), e procura match exato em `produtos.nome`.
-
-**Se não encontra → linha rejeitada** com motivo:
-> `PRODUTO "SOJA A GRANEL" não cadastrado no sistema (cadastre antes de re-importar)`
-
-⚠️ Cadastre os produtos antes da primeira importação. Não criamos automaticamente pra evitar duplicação.
-
-### PRODUTOR
-Pega o nome após a vírgula e procura em `produtores.nome`.
-
-**Se não encontra → cria automaticamente** com:
-- `nome`: do CSV
-- `razao_social`: do campo ORIGEM se preenchido, senão usa o nome
-- `cpf_cnpj`: `ERP-<código_csv>` (pra rastrear depois)
-- `cidade` / `uf`: do campo ORIGEM se tem formato `Cidade-UF`
-- `tipo`: `vendedor` (padrão)
-- `ativo`: `true`
-
-Produtores criados auto aparecem com `cpf_cnpj` começando com `ERP-` — vale revisar e completar os dados depois.
-
-### ORIGEM
-**Não** vincula a `locais`. Apenas grava como texto livre em `contratos.origem_descricao`. O vínculo manual com um Local de origem pode ser feito depois pela UI.
-
-## Idempotência
-
-O `numero` do contrato é gerado como `ERP-<ESTAB>-<CONTRATO>` (ex: `ERP-5-10.244`).
-Re-importar o mesmo arquivo (ou um CSV com contratos repetidos) faz **upsert**: atualiza o contrato existente em vez de duplicar.
-
-## Como subir um CSV (manual)
-
-Pelo **Supabase Studio**:
-1. Storage → bucket `importacoes` → pasta `contratos/pendentes/`
-2. Upload do arquivo CSV (ex: `contratos_2026-05-23.csv`)
-
-Pelo **CLI** (script automatizado do ERP):
-```bash
-curl -X POST 'https://<projeto>.supabase.co/storage/v1/object/importacoes/contratos/pendentes/contratos_2026-05-23.csv' \
-  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-  -H "Content-Type: text/csv" \
-  --data-binary @contratos_2026-05-23.csv
+```
+ESTAB;TIPO;OPERACAO;CONTRATO;DESCSAFRA;DTEMISSAO;DTVENCTO;DTINICIO;DTFINAL;P_PRODUTOR;P_DOCCPF;P_NOMEFAZENDA;P_CIDADE_PRODUTOR;PRODUTO;QUANTIDADE;VALORUNIT;VALORTOTAL;ORIGEM;NQTDSALDO;NVLRSALDO
 ```
 
-## Como disparar a importação (manual)
+### Exemplo de linha válida
 
-Por **HTTP** (admin/comercial autenticado):
-```bash
-curl -X POST 'https://<projeto>.supabase.co/functions/v1/import-contratos-csv' \
-  -H "Authorization: Bearer <user-jwt>"
+```
+5;COMPRA;RETIRADA ARMAZEM DE TERCEIRO;10718;26-2026;15.03.2026;30.06.2026;15.03.2026;31.07.2026;270-OTAVIO JOVELLI;08740825000316;FAZ SANTO ANTONIO;Arandu-SP;3-SOJA A GRANEL;500.000,00;180,000000;90.000.000,00;Taquarituba-SP, ELIANO ANTUNES;500.000,00;90.000.000,00
 ```
 
-Por **Supabase Studio**:
-- Edge Functions → `import-contratos-csv` → Invoke
+---
 
-Retorno:
-```json
-{
-  "ok": true,
-  "processados": 1,
-  "relatorios": [
-    {
-      "arquivo": "contratos_2026-05-23.csv",
-      "total": 118,
-      "importadas": 115,
-      "rejeitadas": 3,
-      "produtores_criados": 12,
-      "linhas": [ ... ]
-    }
-  ]
-}
+## 🔗 De-para: CSV → banco
+
+### Tabela `contratos` (1 linha de CSV = 1 contrato)
+
+| Campo CSV          | Coluna `contratos`              | Tratamento                                                                                                         |
+| ------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `ESTAB`            | `empresa_origem_codigo`         | string como veio. Informativo.                                                                                     |
+| `TIPO`             | `tipo_contrato`                 | minúsculo: `compra` ou `venda`. Outro valor → linha rejeitada.                                                     |
+| `OPERACAO`         | `operacao`                      | string livre (ex: "RETIRADA ARMAZEM DE TERCEIRO").                                                                 |
+| `CONTRATO`         | `numero_manual` + `numero_origem` | pontos removidos (`9.985` → `9985`).                                                                              |
+| `CONTRATO`         | `numero`                        | prefixado: `ERP-<ESTAB>-<contrato>` (ex: `ERP-5-9985`). Chave de upsert.                                          |
+| `DESCSAFRA`        | `safra`                         | string como veio (ex: `26-2026`).                                                                                  |
+| `DTEMISSAO`        | `data_emissao`                  | `dd.mm.yyyy` → `yyyy-mm-dd`.                                                                                       |
+| `DTVENCTO`         | `data_vencto_financeiro`        | idem.                                                                                                              |
+| `DTINICIO`         | `data_inicio`                   | idem.                                                                                                              |
+| `DTFINAL`          | `data_fim`                      | idem.                                                                                                              |
+| `P_PRODUTOR`       | → `produtor_id`                 | extrai nome do formato `<codigo>-<nome>`. Resolve produtor por CPF/CNPJ (ver abaixo).                              |
+| `P_DOCCPF`         | (lookup `produtores.cpf_cnpj`) | só dígitos. **Obrigatório.** Vazio → linha rejeitada.                                                              |
+| `P_NOMEFAZENDA`    | `produtores.nome`               | usado se for criar/atualizar o produtor. Sobrescreve nome se já existir.                                           |
+| `P_CIDADE_PRODUTOR`| `produtores.cidade`, `.uf`      | `"Arandu-SP"` → cidade=`Arandu`, uf=`SP`.                                                                          |
+| `PRODUTO`          | → `produto_id`                  | extrai nome do `<codigo>-<nome>`. Lookup em `produtos.nome` (normalizado). Sem match → **linha rejeitada**.        |
+| `QUANTIDADE`       | `qtd_kg_total`, `saldo_kg`      | número pt-BR → kg. `saldo_kg` é setado igual e o trigger recalcula depois com base nas cargas.                     |
+| `VALORUNIT`        | `valor_unitario_saca`           | R$ por saca de 60 kg.                                                                                              |
+| `VALORUNIT/60`     | `valor_unitario`                | derivado: R$/kg (calculado pelo importador).                                                                       |
+| `VALORTOTAL`       | `valor_total`                   | número pt-BR → R$.                                                                                                 |
+| `ORIGEM`           | `origem_descricao`              | string livre (ex: `"Taquarituba-SP, ELIANO ANTUNES"`). Não vincula a um Local cadastrado — texto puro.            |
+| `NQTDSALDO`        | `qtd_kg_origem_erp`             | **informativo** — saldo do ERP de origem. NÃO afeta o `saldo_kg` do sistema (trigger é a fonte da verdade).        |
+| `NVLRSALDO`        | `valor_saldo`                   | informativo — R$ restantes no ERP.                                                                                 |
+
+**Defaults sempre setados:**
+- `status` = `"ativo"`
+- `disponivel` = `false` (precisa abrir manualmente em `/contratos/<id>` clicando "Disponibilizar para publicação")
+
+**Upsert:** o importador usa `numero` como chave de conflito. Re-rodar com o mesmo CSV **atualiza** os contratos existentes em vez de duplicar.
+
+### Tabela `produtores` (de-para por CPF/CNPJ)
+
+| Cenário                                                | Ação                                                       |
+| ------------------------------------------------------ | ---------------------------------------------------------- |
+| CPF/CNPJ não existe na tabela `produtores`             | **Cria** novo registro com nome, cidade, UF, tipo, ativo=true |
+| CPF/CNPJ existe                                        | **Atualiza** nome + cidade + UF (sobrescreve se mudou)     |
+| Vazio (`P_DOCCPF` em branco)                           | Linha **rejeitada** com motivo `P_DOCCPF vazio`            |
+
+**Tipo do produtor:**
+- `TIPO=COMPRA` → `produtores.tipo = "vendedor"` (Terra Roxa compra dele)
+- `TIPO=VENDA` → `produtores.tipo = "comprador"`
+
+### Tabela `produtos` (lookup obrigatório, NÃO cria)
+
+| Cenário                              | Ação                                                                  |
+| ------------------------------------ | --------------------------------------------------------------------- |
+| Nome do produto existe em `produtos` | Vincula `contratos.produto_id`                                        |
+| Não existe                           | Linha **rejeitada**. Mensagem: `PRODUTO "X" não cadastrado (cadastre antes de re-importar)` |
+
+**→ Pra importar:** cadastre todos os produtos do CSV (SOJA, MILHO, etc.) em `/cadastros/produtos` antes.
+
+---
+
+## 🧮 O que é recalculado
+
+Depois do `upsert` em `contratos`, o importador chama:
+
+```sql
+SELECT public.recalcular_saldo_contrato(contrato.id);
 ```
 
-## Onde ver o histórico
+Esse RPC zera o `saldo_kg` para `qtd_kg_total − SUM(cargas.total_kg WHERE status != 'cancelada')`. Útil em re-importação: se você já publicou cargas a partir desse contrato, o saldo correto é preservado (não reseta pro total).
 
-Tabela `importacao_log` (consulte pelo Supabase Studio → Table Editor):
+> ⚠️ A migration `20260523120000_saldo_reservado_triggers.sql` precisa estar aplicada pra a função `recalcular_saldo_contrato` existir.
 
-| Coluna | Descrição |
-|---|---|
-| `arquivo` | nome do CSV |
-| `iniciada_em` / `concluida_em` | timestamps |
-| `total_linhas` | linhas no CSV |
-| `importadas` / `rejeitadas` | contagens |
-| `produtores_criados` | quantos produtores foram criados auto |
-| `arquivo_erros` | caminho do CSV de erros (se houver) |
-| `status` | `sucesso` / `sucesso_parcial` / `erro` |
+---
 
-## Onde baixar o CSV de erros
+## ❌ Linhas rejeitadas
 
-Bucket `importacoes/contratos/erros/<timestamp>_<nome>.csv`.
-Formato: `linha;contrato;motivo`.
+Motivos possíveis:
 
-Exemplo:
-```csv
+| Motivo                                     | Como corrigir                                    |
+| ------------------------------------------ | ------------------------------------------------ |
+| `TIPO inválido`                            | TIPO deve ser exatamente `COMPRA` ou `VENDA`     |
+| `PRODUTO "X" não cadastrado`               | Cadastrar em `/cadastros/produtos` e re-importar |
+| `PRODUTO vazio` / `P_PRODUTOR vazio`       | Preencher no CSV                                 |
+| `P_DOCCPF vazio`                           | Preencher CPF/CNPJ no CSV (obrigatório)          |
+| `QUANTIDADE inválida`                      | Número pt-BR válido > 0                          |
+| `Falha ao criar produtor` / `Insert contrato` | Erro no banco — checar log no Vercel/Supabase   |
+
+Cada linha rejeitada vira uma entrada no CSV gerado em `erros/<timestamp>_<nome>.csv` com formato:
+
+```
 linha;contrato;motivo
-17;10.564;PRODUTO "TRIGO A GRANEL ESPECIAL" não cadastrado no sistema (cadastre antes de re-importar)
-99;9.985;TIPO inválido: "ARRENDAMENTO" (esperado COMPRA ou VENDA)
+2;10718;PRODUTO "SOJA EM CASCA" não cadastrado
+5;10721;P_DOCCPF vazio (CPF/CNPJ obrigatório pra de-para)
 ```
 
-## Próximos passos (Fase 2 e 3 do plano)
+---
 
-- [ ] Cron pg_cron pra invocar a função a cada N minutos
-- [ ] Tela `/configuracoes/importacoes` com status visual
-- [ ] Botão "Importar agora" pela UI
-- [ ] Botão "Vincular local de origem manualmente" no detalhe do contrato
+## 🚀 Como rodar a importação
+
+### Opção A — Pelo Supabase Dashboard (mais fácil)
+
+1. Upload do CSV em **Storage → importacoes → contratos/pendentes/**
+2. Abre **Edge Functions → import-contratos-csv**
+3. Clica **Invoke** (sem payload necessário — a function varre `pendentes/`)
+4. Vê o resultado no log da function
+
+### Opção B — Pela CLI
+
+```bash
+# Faz upload do CSV (substitua o caminho)
+supabase storage cp ./meus-contratos.csv \
+  importacoes/contratos/pendentes/meus-contratos.csv
+
+# Dispara a function
+supabase functions invoke import-contratos-csv
+
+# Resposta no formato:
+# {
+#   "arquivos_processados": [{
+#     "arquivo": "meus-contratos.csv",
+#     "total": 100,
+#     "importadas": 98,
+#     "rejeitadas": 2,
+#     "produtores_criados": 12,
+#     "produtores_atualizados": 5,
+#     ...
+#   }]
+# }
+```
+
+### Opção C — Ver os logs depois
+
+```sql
+-- Últimas 10 importações
+select arquivo, status, total_linhas, importadas, rejeitadas, produtores_criados,
+       iniciada_em, concluida_em
+from public.importacao_log
+where tipo = 'contratos'
+order by iniciada_em desc
+limit 10;
+```
+
+---
+
+## 🔍 Cheatsheet de testes pré-import
+
+Antes de subir um CSV grande, valide com 2-3 linhas:
+
+```sql
+-- 1. Todos os produtos do CSV existem?
+select distinct extract_part(produto_csv, '-', 2) from temp_csv
+left join produtos on lower(produtos.nome) = lower(...)
+where produtos.id is null;
+-- (ajuste manual; ideia: ver quais produtos faltam cadastrar)
+
+-- 2. Contratos que vão dar upsert (atualizar):
+select c.numero, c.qtd_kg_total, c.saldo_kg
+from contratos c
+where c.numero = 'ERP-5-10718';
+
+-- 3. Após importação, conferir 1 contrato:
+select numero, qtd_kg_total, saldo_kg, qtd_kg_origem_erp, status, disponivel,
+       produtor_id, produto_id, criado_em
+from contratos
+where numero_manual = '10718';
+```
+
+---
+
+## 💡 Boas práticas
+
+- **Sempre 1 lote pequeno primeiro** (5-10 linhas) pra ver se o de-para de produto está OK.
+- Os contratos importados nascem com `disponivel = false`. Pra publicar carga a partir deles, abra o contrato em `/contratos/<id>` e clique **"Disponibilizar para publicação"**.
+- Re-importar o mesmo arquivo é seguro: `numero` é chave única e o upsert atualiza em vez de duplicar. O trigger preserva o saldo correto se já há cargas publicadas.
+- **NQTDSALDO** do ERP é apenas informativo. Não confie nele depois da primeira importação — o sistema mantém seu próprio saldo via trigger.
+
+---
+
+## 📚 Arquivos relacionados
+
+- Edge Function: `supabase/functions/import-contratos-csv/index.ts`
+- Parser CSV: `supabase/functions/import-contratos-csv/parser.ts`
+- Tipo `Contrato`: `lib/types.ts` (linhas 263+)
+- Migration do trigger de saldo: `supabase/migrations/20260523120000_saldo_reservado_triggers.sql`
+- Script de fix saldo zumbi: `supabase/scripts/fix-saldo-contratos-zumbi.sql`
