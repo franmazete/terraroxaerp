@@ -71,7 +71,6 @@ export const NAV_TRANSPORTADORA: NavSection[] = [
       { href: "/painel", label: "Painel" },
       { href: "/disponiveis", label: "Cargas Disponíveis" },
       { href: "/minhas-reservas", label: "Minhas Reservas" },
-      { href: "/ordens", label: "Ordens de Carregamento", requires: { modulo: "ordens_carregamento", acao: "visualizar" } },
       { href: "/pendencias", label: "Pendências" },
     ],
   },
