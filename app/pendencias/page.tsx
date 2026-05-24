@@ -74,6 +74,7 @@ export default async function PendenciasPage() {
       criadaEm: oc.emitida_em,
       refugada: !!oc.refugada,
       passos,
+      snapshot: snap as OCSnapshot,
     });
   }
 

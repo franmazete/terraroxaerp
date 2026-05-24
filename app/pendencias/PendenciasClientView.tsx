@@ -14,7 +14,10 @@ import {
   proximoMeuPasso,
   type EstadoUX,
 } from "@/lib/domain/checklist-textos";
-import { progressoChecklist, type PassoStatus } from "@/lib/domain/checklist";
+import { progressoChecklist, type OCSnapshot, type PassoStatus } from "@/lib/domain/checklist";
+import type { PassoChecklist } from "@/lib/types";
+import { gerarUrlDownloadAction } from "@/lib/api/actions";
+import { useToast } from "@/components/ui/Toast";
 
 export interface CargaPendencia {
   kind: "oc" | "reserva_aprovada";
@@ -30,6 +33,71 @@ export interface CargaPendencia {
   criadaEm: string;
   refugada: boolean;
   passos: PassoStatus[];
+  /** Snapshot completo da OC quando disponível — usado pra resolver anexos. */
+  snapshot?: OCSnapshot | null;
+}
+
+/**
+ * Resolve o arquivo (path no bucket "operacao") correspondente a um passo do
+ * checklist a partir do snapshot da OC. Retorna null se não houver anexo.
+ */
+function arquivoDoPasso(
+  passo: PassoChecklist,
+  snapshot: OCSnapshot | null | undefined,
+): { url: string; nome: string } | null {
+  if (!snapshot) return null;
+  switch (passo) {
+    case "autorizacao_carregamento":
+      return snapshot.autorizacao?.arquivo_url
+        ? { url: snapshot.autorizacao.arquivo_url, nome: snapshot.autorizacao.nome_arquivo ?? "autorizacao" }
+        : null;
+    case "ticket_carregamento":
+      return snapshot.ticketCarreg?.arquivo_url
+        ? { url: snapshot.ticketCarreg.arquivo_url, nome: snapshot.ticketCarreg.nome_arquivo ?? "ticket-carregamento" }
+        : null;
+    case "laudo_classificacao":
+      return snapshot.laudo?.arquivo_url
+        ? { url: snapshot.laudo.arquivo_url, nome: snapshot.laudo.nome_arquivo ?? "laudo" }
+        : null;
+    case "nf_venda":
+      return snapshot.notaFiscal?.xml_url
+        ? { url: snapshot.notaFiscal.xml_url, nome: `nf-${snapshot.notaFiscal.numero}.xml` }
+        : null;
+    case "anexo_agendamento":
+      return snapshot.anexoAgendamento?.arquivo_url
+        ? { url: snapshot.anexoAgendamento.arquivo_url, nome: snapshot.anexoAgendamento.nome_arquivo ?? "agendamento" }
+        : null;
+    case "cte_emissao":
+      return snapshot.cte?.xml_url
+        ? { url: snapshot.cte.xml_url, nome: `cte-${snapshot.cte.numero}.xml` }
+        : null;
+    case "comprovante_descarga":
+      return snapshot.descarga?.ticket_descarga_url
+        ? { url: snapshot.descarga.ticket_descarga_url, nome: "ticket-descarga" }
+        : null;
+    case "aviso_refugo":
+      return snapshot.avisoRefugo?.arquivo_url
+        ? { url: snapshot.avisoRefugo.arquivo_url, nome: snapshot.avisoRefugo.nome_arquivo ?? "aviso-refugo" }
+        : null;
+    case "cte_retorno":
+      return snapshot.cteRetorno?.arquivo_url
+        ? { url: snapshot.cteRetorno.arquivo_url, nome: snapshot.cteRetorno.nome_arquivo ?? "cte-retorno" }
+        : null;
+    case "estadia":
+      return snapshot.estadia?.arquivo_url
+        ? { url: snapshot.estadia.arquivo_url, nome: snapshot.estadia.nome_arquivo ?? "estadia" }
+        : null;
+    case "fatura_ctes":
+      return snapshot.faturamento?.fatura_url
+        ? { url: snapshot.faturamento.fatura_url, nome: "fatura" }
+        : null;
+    case "pagamento":
+      return snapshot.pagamento?.comprovante_url
+        ? { url: snapshot.pagamento.comprovante_url, nome: "comprovante-pagamento" }
+        : null;
+    default:
+      return null;
+  }
 }
 
 interface Props {
@@ -51,6 +119,22 @@ export function PendenciasClientView({ dadosSSR, ehTransp }: Props) {
   const itens = dadosSSR ?? [];
   const [filtro, setFiltro] = useState<Filtro>("todas");
   const [aberto, setAberto] = useState<string | null>(null);
+  const [baixandoKey, setBaixandoKey] = useState<string | null>(null);
+  const toast = useToast();
+
+  async function baixarArquivo(arquivoUrl: string, key: string) {
+    setBaixandoKey(key);
+    try {
+      const r = await gerarUrlDownloadAction(arquivoUrl);
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      window.open(r.data!.url, "_blank", "noopener,noreferrer");
+    } finally {
+      setBaixandoKey(null);
+    }
+  }
 
   /** Calcula resumos por carga (qual é a próxima ação, contagem de passos). */
   const itensComResumo = useMemo(() => {
@@ -269,6 +353,8 @@ export function PendenciasClientView({ dadosSSR, ehTransp }: Props) {
                 <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
                   {it.passos.map((p, idx) => {
                     const t = textoChecklist(p, ehTransp);
+                    const arquivo = arquivoDoPasso(p.passo, it.snapshot);
+                    const dlKey = `${it.id}-${p.passo}-${idx}`;
                     return (
                       <div
                         key={`${p.passo}-${idx}`}
@@ -292,6 +378,16 @@ export function PendenciasClientView({ dadosSSR, ehTransp }: Props) {
                             <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{p.hint}</div>
                           )}
                         </div>
+                        {arquivo && (
+                          <Button
+                            size="sm"
+                            onClick={() => baixarArquivo(arquivo.url, dlKey)}
+                            disabled={baixandoKey === dlKey}
+                            title={arquivo.nome}
+                          >
+                            {baixandoKey === dlKey ? "Gerando..." : "⬇ Baixar anexo"}
+                          </Button>
+                        )}
                         {t.estado === "minha_vez" && it.ocId && (
                           <Link href={`/ordens/${it.ocId}`}>
                             <Button size="sm" variant="primary">Executar →</Button>
