@@ -181,9 +181,11 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
 
     // Detector de CPF duplicado: oferece vincular existente em vez de criar
     const cpfLimpo = novoMot.cpf.replace(/\D+/g, "");
-    const existente = motoristas.find((m) => m.cpf.replace(/\D+/g, "") === cpfLimpo);
+    const fonteMot = supabaseConfigured ? motoristasReais : motoristas;
+    const existente = fonteMot.find((m) => m.cpf.replace(/\D+/g, "") === cpfLimpo);
     if (existente) {
-      if (existente.transp_ids.includes(user.transp_id)) {
+      const existenteIds = existente.transp_ids ?? [];
+      if (existenteIds.includes(user.transp_id)) {
         toast.info(`Motorista "${existente.nome}" já está vinculado — selecione no dropdown acima.`);
         setMotoristaId(existente.id);
         setNovoMot(EMPTY_MOT);
@@ -202,10 +204,23 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
         confirmarLabel: "Vincular",
       });
       if (ok) {
-        vincularTranspAoMotorista(existente.id, user.transp_id);
+        const meuTid = user.transp_id;
+        if (supabaseConfigured) {
+          const vinc = await vincularMotoristaTransp(existente.id, meuTid);
+          if ("error" in vinc) { toast.error(vinc.error); return; }
+          // Atualiza localmente: existente passa a ter user.transp_id em transp_ids
+          setMotoristasReais((arr) => {
+            const jaTem = arr.some((m) => m.id === existente.id);
+            const atualizado: Motorista = { ...existente, transp_ids: [...existenteIds, meuTid] };
+            return jaTem ? arr.map((m) => m.id === existente.id ? atualizado : m) : [...arr, atualizado];
+          });
+        } else {
+          vincularTranspAoMotorista(existente.id, meuTid);
+        }
         setMotoristaId(existente.id);
         setNovoMot(EMPTY_MOT);
         setNovoMotOpen(false);
+        toast.success(`${existente.nome} vinculado à sua transportadora.`);
       }
       return;
     }
@@ -251,9 +266,11 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
     if (!user?.transp_id) return;
 
     const placaUp = novoVei.placa_cavalo.toUpperCase().replace(/\s+/g, "");
-    const existente = veiculos.find((v) => v.placa_cavalo.toUpperCase().replace(/\s+/g, "") === placaUp);
+    const fonteVei = supabaseConfigured ? veiculosReais : veiculos;
+    const existente = fonteVei.find((v) => v.placa_cavalo.toUpperCase().replace(/\s+/g, "") === placaUp);
     if (existente) {
-      if (existente.transp_ids.includes(user.transp_id)) {
+      const existenteIds = existente.transp_ids ?? [];
+      if (existenteIds.includes(user.transp_id)) {
         toast.info(`Veículo "${existente.placa_cavalo}" já está vinculado — selecione no dropdown acima.`);
         setVeiculoId(existente.id);
         setNovoVei(EMPTY_VEI);
@@ -272,10 +289,22 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
         confirmarLabel: "Vincular",
       });
       if (ok) {
-        vincularTranspAoVeiculo(existente.id, user.transp_id);
+        const meuTid = user.transp_id;
+        if (supabaseConfigured) {
+          const vinc = await vincularVeiculoTransp(existente.id, meuTid);
+          if ("error" in vinc) { toast.error(vinc.error); return; }
+          setVeiculosReais((arr) => {
+            const jaTem = arr.some((v) => v.id === existente.id);
+            const atualizado: Veiculo = { ...existente, transp_ids: [...existenteIds, meuTid] };
+            return jaTem ? arr.map((v) => v.id === existente.id ? atualizado : v) : [...arr, atualizado];
+          });
+        } else {
+          vincularTranspAoVeiculo(existente.id, meuTid);
+        }
         setVeiculoId(existente.id);
         setNovoVei(EMPTY_VEI);
         setNovoVeiOpen(false);
+        toast.success(`Veículo ${existente.placa_cavalo} vinculado à sua transportadora.`);
       }
       return;
     }
@@ -330,8 +359,8 @@ export function ReservarCargaModal({ carga, onClose, onSuccess }: Props) {
     if (!motoristaId) { toast.warn("Selecione ou cadastre um motorista."); return; }
     if (!veiculoId) { toast.warn("Selecione ou cadastre um veículo."); return; }
 
-    const mot = motoristas.find((m) => m.id === motoristaId);
-    const vei = veiculos.find((v) => v.id === veiculoId);
+    const mot = meusMotoristas.find((m) => m.id === motoristaId);
+    const vei = meusVeiculos.find((v) => v.id === veiculoId);
     if (!mot || !vei) { toast.error("Motorista ou veículo inválido."); return; }
 
     if (qtdN > vei.capacidade_kg) {
