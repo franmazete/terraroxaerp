@@ -85,9 +85,14 @@ export function PainelTranspClientView({ dadosSSR = null }: Props) {
             {user?.nome} · {stats.minhasOcs.length} OC(s) em andamento
           </div>
         </div>
-        <Link href="/disponiveis">
-          <Button variant="primary">🔍 Ver Cargas Disponíveis</Button>
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/pendencias">
+            <Button>📋 Fila operacional</Button>
+          </Link>
+          <Link href="/disponiveis">
+            <Button variant="primary">🔍 Ver Cargas Disponíveis</Button>
+          </Link>
+        </div>
       </div>
 
       <div className="grid-4 section-gap">

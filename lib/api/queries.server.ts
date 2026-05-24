@@ -480,3 +480,92 @@ export async function getOCSnapshot(ocId: string): Promise<OCSnapshot | null> {
     pagamento: pagamento ?? undefined,
   };
 }
+
+/**
+ * Monta snapshots de N OCs em batch — usado pela /pendencias para calcular
+ * o checklist de cada OC ativa numa só varredura. ~13 queries (uma por tabela)
+ * em vez de 13×N (uma por OC × tabela).
+ */
+export async function getOCSnapshotsEmBatch(ocIds: string[]): Promise<OCSnapshot[]> {
+  if (NAO_CONFIGURADO || ocIds.length === 0) return [];
+  const supabase = await createClient();
+
+  async function listIn<T>(table: string, key: string = "oc_id"): Promise<T[]> {
+    const { data, error } = await supabase.from(table).select("*").in(key, ocIds);
+    if (error) {
+      console.error(`[snapshot batch] ${table}: ${error.message}`);
+      return [];
+    }
+    return (data ?? []) as T[];
+  }
+
+  // Busca OCs e todas as tabelas relacionadas em paralelo
+  const [
+    ordensRows,
+    tickets,
+    laudos,
+    nfs,
+    agendamentos,
+    ctes,
+    descargas,
+    avisos,
+    ctesRetorno,
+    estadias,
+    quebras,
+    faturamentos,
+    pagamentos,
+  ] = await Promise.all([
+    (async () => {
+      const { data } = await supabase.from("ordens_carregamento").select("*").in("id", ocIds);
+      return (data ?? []) as OrdemCarregamento[];
+    })(),
+    listIn<TicketCarregamento>("tickets_carregamento"),
+    listIn<LaudoClassificacao>("laudos_classificacao"),
+    listIn<NotaFiscal>("notas_fiscais"),
+    listIn<AnexoAgendamento>("anexos_agendamento"),
+    listIn<CTE>("ctes"),
+    listIn<DadosDescarga>("dados_descarga"),
+    listIn<AvisoRefugo>("avisos_refugo"),
+    listIn<CteRetorno>("ctes_retorno"),
+    listIn<Estadia>("estadias"),
+    listIn<Quebra>("quebras"),
+    listIn<Faturamento>("faturamentos"),
+    listIn<Pagamento>("pagamentos"),
+  ]);
+
+  // Autorizações via reserva_id (não tem oc_id direto)
+  const reservaIds = ordensRows.map((o) => o.reserva_id).filter(Boolean);
+  let autorizacoes: AutorizacaoCarregamento[] = [];
+  if (reservaIds.length > 0) {
+    const { data } = await supabase
+      .from("autorizacoes_carregamento")
+      .select("*")
+      .in("reserva_id", reservaIds);
+    autorizacoes = (data ?? []) as AutorizacaoCarregamento[];
+  }
+
+  // Indexa por oc_id pra montar cada snapshot rapidinho
+  return ordensRows.map((oc): OCSnapshot => {
+    const nfsDaOc = nfs.filter((n) => n.oc_id === oc.id);
+    const ctesDaOc = ctes.filter((c) => c.oc_id === oc.id);
+    return {
+      oc,
+      autorizacao: autorizacoes.find(
+        (a) => a.id === oc.autorizacao_id || a.reserva_id === oc.reserva_id,
+      ),
+      ticketCarreg: tickets.find((t) => t.oc_id === oc.id),
+      laudo: laudos.find((l) => l.oc_id === oc.id),
+      notaFiscal:
+        nfsDaOc.find((n) => (n.status ?? "ativa") === "ativa") ?? nfsDaOc[0],
+      anexoAgendamento: agendamentos.find((a) => a.oc_id === oc.id),
+      cte: ctesDaOc.find((c) => !c.substitui_cte_id) ?? ctesDaOc[0],
+      descarga: descargas.find((d) => d.oc_id === oc.id),
+      avisoRefugo: avisos.find((a) => a.oc_id === oc.id),
+      cteRetorno: ctesRetorno.find((c) => c.oc_id === oc.id),
+      estadia: estadias.find((e) => e.oc_id === oc.id),
+      quebra: quebras.find((q) => q.oc_id === oc.id),
+      faturamento: faturamentos.find((f) => f.oc_id === oc.id),
+      pagamento: pagamentos.find((p) => p.oc_id === oc.id),
+    };
+  });
+}

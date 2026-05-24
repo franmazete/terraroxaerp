@@ -34,6 +34,9 @@ export function DashFinanceiro({ dadosSSR = null }: DashProps) {
           <div className="page-title">💰 Dashboard Financeiro</div>
           <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>Pagamentos, divergências e fluxo de caixa</div>
         </div>
+        <Link href="/pendencias">
+          <Button>📋 Fila operacional</Button>
+        </Link>
       </div>
 
       <div className="grid-4 section-gap">

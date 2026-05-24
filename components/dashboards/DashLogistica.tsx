@@ -112,7 +112,12 @@ export function DashLogistica({ dadosSSR = null }: DashProps) {
             OCs ativas, trânsito e atalhos por etapa do fluxo
           </div>
         </div>
-        <Button variant="primary" onClick={() => setPublicarOpen(true)}>📦 Publicar Carga</Button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/pendencias">
+            <Button>📋 Fila operacional</Button>
+          </Link>
+          <Button variant="primary" onClick={() => setPublicarOpen(true)}>📦 Publicar Carga</Button>
+        </div>
       </div>
 
       <div className="grid-4 section-gap">

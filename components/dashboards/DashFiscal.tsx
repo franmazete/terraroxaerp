@@ -43,6 +43,9 @@ export function DashFiscal({ dadosSSR = null }: DashProps) {
           <div className="page-title">📋 Dashboard Fiscal</div>
           <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>NFs, trocas, CT-es e liberação de faturamento</div>
         </div>
+        <Link href="/pendencias">
+          <Button>📋 Fila operacional</Button>
+        </Link>
       </div>
 
       <div className="grid-4 section-gap">
