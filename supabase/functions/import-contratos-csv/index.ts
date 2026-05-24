@@ -282,11 +282,21 @@ async function processarLinha(
     disponivel: false,
   };
 
-  const { error: errIns } = await supabase
+  const { data: contratoUpserted, error: errIns } = await supabase
     .from("contratos")
-    .upsert(insertPayload, { onConflict: "numero" });
+    .upsert(insertPayload, { onConflict: "numero" })
+    .select("id")
+    .single();
 
   if (errIns) return rej(linha, `Insert contrato: ${errIns.message}`, produtorAcao);
+
+  // O upsert acima sobrescreve saldo_kg com qtd_kg_total. Se o contrato já existia
+  // e tinha cargas publicadas, o saldo precisa ser ajustado pra refletir as cargas.
+  // O trigger automático só dispara em mudanças na tabela cargas — então chamamos
+  // o RPC manualmente aqui para garantir consistência também na re-importação.
+  if (contratoUpserted?.id) {
+    await supabase.rpc("recalcular_saldo_contrato", { p_contrato_id: contratoUpserted.id });
+  }
 
   return {
     relatorio: { linha: linha.linha, contrato: linha.contrato, status: "importada", produtor_acao: produtorAcao },
