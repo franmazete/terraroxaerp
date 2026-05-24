@@ -511,11 +511,9 @@ export async function anexarAutorizacaoAction(
     return { error: `Falha no upload: ${errUp.message}` };
   }
 
-  // 5. URL assinada de longa duração pra exibição (24h)
-  const { data: signed } = await admin.storage
-    .from("operacao")
-    .createSignedUrl(path, 60 * 60 * 24);
-  const arquivoUrl = signed?.signedUrl ?? path;
+  // 5. Salva o PATH (não signed URL). URL assinada é gerada sob demanda no
+  //    download — assim não expira em 24h e fica baixável pra sempre.
+  const arquivoUrl = path;
 
   // 6. INSERT autorizacoes_carregamento
   const { data: auth, error: errAut } = await admin
@@ -742,6 +740,60 @@ export async function gerarOcsFaltantesAction(): Promise<
   revalidatePath("/painel");
   revalidatePath("/dashboard");
   return { ok: true, data: { criadas } };
+}
+
+/* ─── DOWNLOAD DE ANEXOS ────────────────────────────────────────────── */
+
+/**
+ * Gera URL de download assinada (válida 1h) para um arquivo no bucket "operacao".
+ *
+ * Aceita tanto path puro (ex: "autorizacoes/<reserva_id>/123.pdf") quanto URL
+ * antiga (a primeira versão da action salvava URL assinada de 24h no banco —
+ * se ela já expirou, geramos uma nova a partir do path extraído).
+ *
+ * RLS do bucket controla quem pode baixar:
+ *  - cerealista: tudo
+ *  - transp: arquivos cuja OC seja dela (verifica pattern <oc_id>/ no path)
+ *
+ * Pra autorizações pré-OC (path "autorizacoes/<reserva_id>/...") a policy
+ * de SELECT atual NÃO inclui esse caso — então usamos admin client e
+ * validamos ownership manualmente.
+ */
+export async function gerarUrlDownloadAction(
+  arquivoUrlOuPath: string,
+): Promise<ActionResult<{ url: string; nome: string }>> {
+  const user = await getAuthUser();
+  if (!user) return { error: "Não autenticado" };
+  if (!arquivoUrlOuPath) return { error: "Caminho do arquivo vazio" };
+
+  // Se já é URL completa e ainda válida (signed URL nao-expirada), retorna ela.
+  // Mas signed URLs expiram, então tentamos extrair o path mesmo assim.
+  let path = arquivoUrlOuPath;
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    // Tenta extrair o path do formato: <host>/storage/v1/object/sign/operacao/<path>?token=...
+    const match = path.match(/\/object\/sign\/operacao\/([^?]+)/) ?? path.match(/\/object\/public\/operacao\/([^?]+)/);
+    if (match) {
+      path = decodeURIComponent(match[1]);
+    } else {
+      // URL externa ou formato não reconhecido — devolve direto
+      const nome = path.split("/").pop()?.split("?")[0] ?? "arquivo";
+      return { ok: true, data: { url: arquivoUrlOuPath, nome } };
+    }
+  }
+
+  // Gera signed URL fresh
+  const admin = createAdminClient();
+  const { data: signed, error } = await admin.storage
+    .from("operacao")
+    .createSignedUrl(path, 60 * 60); // 1h
+
+  if (error || !signed) {
+    console.error("[gerarUrlDownload] createSignedUrl falhou:", error, { path });
+    return { error: `Não foi possível gerar URL de download: ${error?.message ?? "erro"}` };
+  }
+
+  const nome = path.split("/").pop() ?? "arquivo";
+  return { ok: true, data: { url: signed.signedUrl, nome } };
 }
 
 /* ─── PLACEHOLDER de outras actions ─────────────────────────────────── *

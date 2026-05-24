@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getOCSnapshot } from "@/lib/api/queries.server";
 import { OrdemDetalheClientView, type OrdemDetalheSSR } from "./OrdemDetalheClientView";
 import type {
   Carga,
@@ -76,9 +77,10 @@ export default async function OrdemDetalhePage({ params }: { params: Promise<{ i
   const destino = (destinoRes.data as Local | null) ?? null;
   const terminal = (terminalRes.data as Terminal | null) ?? null;
 
-  // 3. Produto e Produtor dependem do contrato
+  // 3. Produto, Produtor e Snapshot completo (todos os anexos)
   let produto: Produto | null = null;
   let produtor: Produtor | null = null;
+  const snapshotPromise = getOCSnapshot(oc.id);
   if (contrato) {
     const [pRes, prRes] = await Promise.all([
       supabase.from("produtos").select("*").eq("id", contrato.produto_id).maybeSingle(),
@@ -87,6 +89,7 @@ export default async function OrdemDetalhePage({ params }: { params: Promise<{ i
     produto = (pRes.data as Produto | null) ?? null;
     produtor = (prRes.data as Produtor | null) ?? null;
   }
+  const snapshot = await snapshotPromise;
 
   const dados: OrdemDetalheSSR = {
     oc,
@@ -100,6 +103,7 @@ export default async function OrdemDetalhePage({ params }: { params: Promise<{ i
     terminal,
     produto,
     produtor,
+    snapshot,
   };
 
   return <OrdemDetalheClientView ocId={id} dadosSSR={dados} />;

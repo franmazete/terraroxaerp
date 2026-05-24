@@ -17,6 +17,7 @@ import { MapaPlaceholder } from "@/components/maps/MapaPlaceholder";
 import { buildOCSnapshot } from "@/lib/domain/oc-snapshot";
 import { CentralDocumentosTab } from "@/components/ordens/CentralDocumentosTab";
 import { AutorizacaoCarregamentoCard } from "@/components/ordens/AutorizacaoCarregamentoCard";
+import { OCAnexosCard } from "@/components/ordens/OCAnexosCard";
 import { Timeline } from "@/components/ui/Timeline";
 import { TrocaNotaSection } from "@/components/fiscal/TrocaNotaSection";
 import { DescargaSection } from "@/components/fiscal/DescargaSection";
@@ -40,6 +41,7 @@ import type {
   Transportadora,
 } from "@/lib/types";
 import type { Veiculo } from "@/lib/types";
+import type { OCSnapshot } from "@/lib/domain/checklist";
 
 export interface OrdemDetalheSSR {
   oc: OrdemCarregamento;
@@ -53,6 +55,8 @@ export interface OrdemDetalheSSR {
   terminal: Terminal | null;
   produto: Produto | null;
   produtor: Produtor | null;
+  /** Snapshot completo da OC (todos os anexos vinculados). null = não disponível. */
+  snapshot?: OCSnapshot | null;
 }
 
 const STATUS_LABEL: Record<OCStatus, string> = {
@@ -269,6 +273,9 @@ export function OrdemDetalheClientView({ ocId, dadosSSR = null }: Props) {
         origem={origem ?? null}
         produtor={produtor ?? null}
       />
+
+      {/* Anexos da operação — lista com download por perfil */}
+      {usandoSSR && dadosSSR?.snapshot && <OCAnexosCard snapshot={dadosSSR.snapshot} />}
 
       {/* Bloco I.9 — 3 trilhas de status paralelas (operacional, fiscal, financeiro) */}
       <Card className="section-gap">
